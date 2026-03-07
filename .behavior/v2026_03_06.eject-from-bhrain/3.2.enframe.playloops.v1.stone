@@ -1,0 +1,65 @@
+enframe the playloop that enables rapid playtest feedback for
+- this wish .behavior/v2026_03_06.eject-from-bhrain/0.wish.md
+- this vision .behavior/v2026_03_06.eject-from-bhrain/1.vision.md (if declared)
+- this criteria .behavior/v2026_03_06.eject-from-bhrain/2.1.criteria.blackbox.md (if declared)
+
+given the research declared here (if any)
+- .behavior/v2026_03_06.eject-from-bhrain/3.1.research.playloop._.v1.i1.md (if declared)
+
+---
+
+for each experience declared in the vision, frame how it will be reproduced in the playloop
+
+| experience | entry point | user actions | expected outcome | how to assert |
+|------------|-------------|--------------|------------------|---------------|
+| ...        | ...         | ...          | ...              | ...           |
+
+---
+
+prove the journey is feasible end-to-end
+
+for each experience, demonstrate that it can be reproduced in this codebase
+- what tools/utilities are available?
+- what setup is required?
+- show a concrete code sketch of the playloop
+
+---
+
+call out gaps explicitly
+
+if any experience cannot be reproduced end-to-end, declare
+- what is blocked?
+- what is required to unblock?
+- is this a blocker or can it be deferred?
+
+---
+
+declare timelines
+
+| phase | what happens |
+|-------|--------------|
+| build | builder runs playloop to feel the experience, expose friction, catch defects |
+| ship  | playloop proves the wish is fulfilled before release |
+| maintain | playloop serves as permanent spec, catches regressions on future changes |
+
+the playloop enables rapid feedback because
+- it reproduces the real user journey in seconds
+- friction felt in the playloop will be felt by the user
+- defects caught in the playloop are caught before the user sees them
+
+---
+
+scope
+- happy paths: the expected user journey
+- guard paths: paths that keep users on track, self heal, or provide idempotency
+
+---
+
+remember
+- playloop enables rapid reproduction feedback to expose friction and defects
+- playloop serves as permanent spec against which future changes are measured
+- if it feels wrong in the playloop, it will feel wrong for the user
+
+---
+
+emit into .behavior/v2026_03_06.eject-from-bhrain/3.2.enframe.playloops.v1.i1.md
