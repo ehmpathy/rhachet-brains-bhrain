@@ -26,18 +26,9 @@ importers:
       iso-price:
         specifier: 1.1.1
         version: 1.1.1(domain-objects@0.31.9)
-      iso-time:
-        specifier: 1.11.1
-        version: 1.11.1
       openai:
         specifier: 4.103.0
         version: 4.103.0(zod@4.3.4)
-      rhachet-artifact:
-        specifier: 1.0.1
-        version: 1.0.1
-      rhachet-artifact-git:
-        specifier: 1.1.5
-        version: 1.1.5
       type-fns:
         specifier: 1.21.0
         version: 1.21.0
@@ -108,9 +99,6 @@ importers:
       rhachet-brains-openai:
         specifier: 0.2.1
         version: 0.2.1(@openai/codex-sdk@0.111.0)(rhachet@1.37.9(zod@4.3.4))
-      rhachet-brains-xai:
-        specifier: 0.2.1
-        version: 0.2.1(@types/node@22.15.21)(rhachet@1.37.9(zod@4.3.4))
       rhachet-roles-bhrain:
         specifier: 0.16.0
         version: 0.16.0(@types/node@22.15.21)
