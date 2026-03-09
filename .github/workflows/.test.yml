@@ -13,8 +13,14 @@ on:
         type: string
         default: "us-east-1"
     secrets:
+      anthropic-api-key:
+        description: "api key for anthropic, used in integration tests"
+        required: true
       openai-api-key:
         description: "api key for openai, used in integration tests"
+        required: true
+      tavily-api-key:
+        description: "api key for tavily, used in web search integration tests"
         required: true
 
 permissions:
@@ -174,7 +180,9 @@ jobs:
       - name: test:integration
         run: THOROUGH=true npm run test:integration
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.openai-api-key }}
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
+          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
+          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
 
   test-acceptance-locally:
     runs-on: ubuntu-24.04
@@ -210,4 +218,6 @@ jobs:
       - name: test:acceptance:locally
         run: THOROUGH=true npm run test:acceptance:locally --if-present
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.openai-api-key }}
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
+          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
+          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}

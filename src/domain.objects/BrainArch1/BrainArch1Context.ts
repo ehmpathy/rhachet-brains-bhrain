@@ -14,7 +14,6 @@ export interface BrainArch1Context extends ContextLogTrail {
   creds: {
     anthropic: { apiKey: string; url: string | null };
     openai: { apiKey: string; url: string | null };
-    qwen: { apiKey: string; url: string | null };
     tavily: { apiKey: string };
   };
 }

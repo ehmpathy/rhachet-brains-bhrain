@@ -13,14 +13,11 @@ import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1T
 
 import { runBrainArch1Loop } from './runBrainArch1Loop';
 
-// mock the SDKs
-jest.mock('@src/access/sdks/anthropic/sdkAnthropic', () => ({
-  sdkAnthropic: {
-    generate: jest.fn(),
-  },
-}));
-
-import { sdkAnthropic } from '@src/access/sdks/anthropic/sdkAnthropic';
+/**
+ * .what = mock generate function for tests
+ * .why = enables control of atom responses in unit tests
+ */
+const mockGenerate = jest.fn();
 
 /**
  * .what = unit tests for runBrainArch1Loop
@@ -29,27 +26,12 @@ import { sdkAnthropic } from '@src/access/sdks/anthropic/sdkAnthropic';
 describe('runBrainArch1Loop', () => {
   const getMockContext = genMockBrainArch1Context;
 
-  // create a mock atom that delegates to sdkAnthropic (which is mocked)
+  // create a mock atom for tests
   const createMockAtom = (): BrainArch1Atom => ({
-    platform: 'anthropic',
-    model: 'test-atom',
-    description: 'mock anthropic atom for testing',
-    generate: async (params, context) => {
-      return sdkAnthropic.generate(
-        {
-          messages: params.messages,
-          tools: params.tools,
-          maxTokens: params.maxTokens,
-        },
-        {
-          anthropic: {
-            auth: { key: context.creds.anthropic.apiKey, url: undefined },
-            llm: { model: 'claude-3-5-sonnet-latest' },
-          },
-          log: context.log,
-        },
-      );
-    },
+    platform: 'test',
+    model: 'mock-model',
+    description: 'mock atom for tests',
+    generate: mockGenerate,
   });
 
   const atom = createMockAtom();
@@ -79,7 +61,7 @@ describe('runBrainArch1Loop', () => {
   given('[case1] simple prompt with immediate response (no tools)', () => {
     when('[t0] runBrainArch1Loop is called', () => {
       then('completes in single iteration', async () => {
-        (sdkAnthropic.generate as jest.Mock).mockResolvedValue({
+        (mockGenerate as jest.Mock).mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Hello! How can I help you?',
@@ -147,7 +129,7 @@ describe('runBrainArch1Loop', () => {
     when('[t0] runBrainArch1Loop is called', () => {
       then('completes after tool use and response', async () => {
         // first call: tool use
-        (sdkAnthropic.generate as jest.Mock)
+        (mockGenerate as jest.Mock)
           .mockResolvedValueOnce({
             message: new BrainArch1SessionMessage({
               role: 'assistant',
@@ -221,7 +203,7 @@ describe('runBrainArch1Loop', () => {
     when('[t0] runBrainArch1Loop is called with maxIterations=2', () => {
       then('terminates with MAX_ITERATIONS', async () => {
         // always return tool calls to force max iterations
-        (sdkAnthropic.generate as jest.Mock).mockResolvedValue({
+        (mockGenerate as jest.Mock).mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: null,
@@ -268,7 +250,7 @@ describe('runBrainArch1Loop', () => {
   given('[case4] aggregates token usage across iterations', () => {
     when('[t0] runBrainArch1Loop completes with multiple iterations', () => {
       then('totalTokenUsage is sum of all iterations', async () => {
-        (sdkAnthropic.generate as jest.Mock)
+        (mockGenerate as jest.Mock)
           .mockResolvedValueOnce({
             message: new BrainArch1SessionMessage({
               role: 'assistant',
