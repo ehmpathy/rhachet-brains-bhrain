@@ -88,7 +88,8 @@ export const genAtomAnthropic = (input: { model: string }): BrainArch1Atom => ({
     const toolCalls =
       toolUseBlocks.length > 0
         ? toolUseBlocks.map((tc) => {
-            if (tc.type !== 'tool_use') throw new Error('unexpected block type');
+            if (tc.type !== 'tool_use')
+              throw new Error('unexpected block type');
             return new BrainArch1ToolCall({
               id: tc.id,
               name: tc.name,
