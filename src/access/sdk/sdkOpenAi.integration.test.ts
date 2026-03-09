@@ -23,7 +23,7 @@ const schemaReadInput = z.object({
  *
  * .note = requires OPENAI_API_KEY environment variable
  */
-describe('sdkOpenAi', () => {
+(process.env.OPENAI_API_KEY ? describe : describe.skip)('sdkOpenAi', () => {
   const getContext = () => ({
     openai: {
       auth: { key: process.env.OPENAI_API_KEY ?? '' },

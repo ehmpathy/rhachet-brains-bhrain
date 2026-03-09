@@ -35,8 +35,10 @@ const getMockContext = (): BrainArch1Context => ({
 /**
  * .what = integration tests for web search tool
  * .why = verify Tavily search works end-to-end
+ *
+ * .note = requires TAVILY_API_KEY environment variable
  */
-describe('executeToolSearch', () => {
+(process.env.TAVILY_API_KEY ? describe : describe.skip)('executeToolSearch', () => {
   given('[case1] a simple search query', () => {
     when('[t0] searching for "sea turtles conservation"', () => {
       // note: use repeatably to handle flaky external API cold starts
