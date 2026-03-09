@@ -26,7 +26,6 @@ const getMockContext = (): BrainArch1Context => ({
   creds: {
     anthropic: { apiKey: '', url: null },
     openai: { apiKey: '', url: null },
-    qwen: { apiKey: '', url: null },
     tavily: { apiKey: process.env.TAVILY_API_KEY ?? '' },
   },
   ...genContextLogTrail(),

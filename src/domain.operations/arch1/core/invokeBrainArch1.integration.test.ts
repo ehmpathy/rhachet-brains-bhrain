@@ -29,10 +29,6 @@ describe('invokeBrainArch1', () => {
         apiKey: process.env.OPENAI_API_KEY ?? '',
         url: null,
       },
-      qwen: {
-        apiKey: process.env.QWEN_API_KEY ?? '',
-        url: process.env.QWEN_API_URL ?? null,
-      },
       tavily: {
         apiKey: process.env.TAVILY_API_KEY ?? '',
       },

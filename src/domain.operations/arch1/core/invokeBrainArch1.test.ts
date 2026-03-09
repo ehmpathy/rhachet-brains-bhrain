@@ -1,21 +1,29 @@
 import { getError, given, then, when } from 'test-fns';
 
 import { genMockBrainArch1Context } from '@src/.test/genMockBrainArch1Context';
+import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
 import { BrainArch1MemoryTokenUsage } from '@src/domain.objects/BrainArch1/BrainArch1MemoryTokenUsage';
 import { BrainArch1Repl } from '@src/domain.objects/BrainArch1/BrainArch1Repl';
 import { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
-import { genAtomAnthropic } from '@src/domain.operations/arch1/plugins/atoms/anthropic';
 
 import { invokeBrainArch1 } from './invokeBrainArch1';
 
-// mock the SDKs
-jest.mock('@src/access/sdks/anthropic/sdkAnthropic', () => ({
-  sdkAnthropic: {
-    generate: jest.fn(),
-  },
-}));
+/**
+ * .what = mock generate function for tests
+ * .why = enables control of atom responses in unit tests
+ */
+const mockGenerate = jest.fn();
 
-import { sdkAnthropic } from '@src/access/sdks/anthropic/sdkAnthropic';
+/**
+ * .what = creates a mock atom for tests
+ * .why = enables unit tests without real SDK dependencies
+ */
+const createMockAtom = (): BrainArch1Atom => ({
+  platform: 'test',
+  model: 'mock-model',
+  description: 'mock atom for tests',
+  generate: mockGenerate,
+});
 
 /**
  * .what = unit tests for invokeBrainArch1
@@ -33,7 +41,7 @@ describe('invokeBrainArch1', () => {
   });
 
   const replBase = new BrainArch1Repl({
-    atom: genAtomAnthropic({ model: 'claude-3-5-sonnet-latest' }),
+    atom: createMockAtom(),
     toolboxes: [],
     memory: null,
     permission: null,
@@ -53,7 +61,7 @@ describe('invokeBrainArch1', () => {
   given('[case1] simple input with no tools', () => {
     when('[t0] invokeBrainArch1 is called', () => {
       then('returns brain response', async () => {
-        (sdkAnthropic.generate as jest.Mock).mockResolvedValue({
+        (mockGenerate as jest.Mock).mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Hello! How can I help you today?',
@@ -92,7 +100,7 @@ describe('invokeBrainArch1', () => {
         expect(result.terminationReason).toBe('NATURAL_COMPLETION');
         expect(result.finalResponse).toContain('empty');
         expect(result.iterationCount).toBe(0);
-        expect(sdkAnthropic.generate).not.toHaveBeenCalled();
+        expect(mockGenerate).not.toHaveBeenCalled();
       });
 
       then('handles whitespace-only input', async () => {
@@ -106,7 +114,7 @@ describe('invokeBrainArch1', () => {
 
         expect(result.terminationReason).toBe('NATURAL_COMPLETION');
         expect(result.finalResponse).toContain('empty');
-        expect(sdkAnthropic.generate).not.toHaveBeenCalled();
+        expect(mockGenerate).not.toHaveBeenCalled();
       });
     });
   });
@@ -134,7 +142,7 @@ describe('invokeBrainArch1', () => {
 
         expect(error).toBeDefined();
         expect(error?.message).toContain('exceeds context window');
-        expect(sdkAnthropic.generate).not.toHaveBeenCalled();
+        expect(mockGenerate).not.toHaveBeenCalled();
       });
     });
   });
@@ -142,7 +150,7 @@ describe('invokeBrainArch1', () => {
   given('[case4] custom system prompt', () => {
     when('[t0] invokeBrainArch1 is called with custom prompt', () => {
       then('uses custom system prompt', async () => {
-        (sdkAnthropic.generate as jest.Mock).mockResolvedValue({
+        (mockGenerate as jest.Mock).mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Arr! How can I help ye?',
@@ -165,7 +173,7 @@ describe('invokeBrainArch1', () => {
           getMockContext(),
         );
 
-        expect(sdkAnthropic.generate).toHaveBeenCalledWith(
+        expect(mockGenerate).toHaveBeenCalledWith(
           expect.objectContaining({
             messages: expect.arrayContaining([
               expect.objectContaining({
@@ -183,7 +191,7 @@ describe('invokeBrainArch1', () => {
   given('[case5] conversation history provided', () => {
     when('[t0] invokeBrainArch1 is called with history', () => {
       then('includes history in messages', async () => {
-        (sdkAnthropic.generate as jest.Mock).mockResolvedValue({
+        (mockGenerate as jest.Mock).mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Your name is Alice.',
@@ -217,7 +225,7 @@ describe('invokeBrainArch1', () => {
           getMockContext(),
         );
 
-        const callArgs = (sdkAnthropic.generate as jest.Mock).mock.calls[0][0];
+        const callArgs = (mockGenerate as jest.Mock).mock.calls[0][0];
         expect(callArgs.messages).toHaveLength(4); // system + 2 history + user
         expect(callArgs.messages[1].content).toBe('My name is Alice.');
         expect(callArgs.messages[2].content).toBe('Nice to meet you, Alice!');

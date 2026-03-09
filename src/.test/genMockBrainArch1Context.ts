@@ -9,7 +9,6 @@ export const genMockBrainArch1Context = (): BrainArch1Context => ({
   creds: {
     anthropic: { apiKey: 'test', url: null },
     openai: { apiKey: 'test', url: null },
-    qwen: { apiKey: 'test', url: null },
     tavily: { apiKey: 'test' },
   },
   ...genContextLogTrail(),
