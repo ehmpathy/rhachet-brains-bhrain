@@ -21,7 +21,7 @@ describe('generateBrainArch1LlmResponse', () => {
   const getMockContext = genMockBrainArch1Context;
 
   const getMockAskResponse = () => ({
-    output: { content: 'test response' },
+    output: 'test response',
     calls: null,
     metrics: {
       size: {
