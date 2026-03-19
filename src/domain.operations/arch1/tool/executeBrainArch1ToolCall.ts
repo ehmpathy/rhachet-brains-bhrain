@@ -1,25 +1,32 @@
+import type { BrainPlugToolDefinition } from 'rhachet/brains';
+
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
 import type { BrainArch1PermissionGuard } from '@src/domain.objects/BrainArch1/BrainArch1PermissionGuard';
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
 import type { BrainArch1ToolCall } from '@src/domain.objects/BrainArch1/BrainArch1ToolCall';
 import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
- * .what = executes a tool call against the merged toolboxes
- * .why = provides unified tool execution with permission checking
+ * .what = type for repl tools with execute function
+ * .why = all tools in bhrain are repl grain with execute
+ */
+type ReplTool = BrainPlugToolDefinition<unknown, unknown, 'repl'>;
+
+/**
+ * .what = executes a tool call against the merged tools
+ * .why = provides unified tool execution with permission check
  */
 export const executeBrainArch1ToolCall = async (
   input: {
     call: BrainArch1ToolCall;
-    toolboxByToolName: Map<string, BrainArch1Toolbox>;
+    toolBySlug: Map<string, BrainPlugToolDefinition>;
     permissionGuard: BrainArch1PermissionGuard;
   },
   context: BrainArch1Context,
 ): Promise<BrainArch1ToolResult> => {
-  // find the toolbox for this tool
-  const toolbox = input.toolboxByToolName.get(input.call.name);
-  if (!toolbox) {
-    const availableTools = Array.from(input.toolboxByToolName.keys());
+  // find the tool for this call
+  const tool = input.toolBySlug.get(input.call.name);
+  if (!tool) {
+    const availableTools = Array.from(input.toolBySlug.keys());
     return new BrainArch1ToolResult({
       callId: input.call.id,
       success: false,
@@ -52,8 +59,46 @@ export const executeBrainArch1ToolCall = async (
     });
   }
 
-  // execute the tool via its toolbox
-  const result = await toolbox.execute({ call: input.call }, context);
+  // execute the tool directly via rhachet's unified interface
+  // note: cast to ReplTool since all bhrain tools are created with genBrainPlugToolDeclaration
+  try {
+    const replTool = tool as ReplTool;
+    const execution = await replTool.execute(
+      {
+        invocation: {
+          exid: input.call.id,
+          slug: tool.slug,
+          input: input.call.input,
+        },
+      },
+      context,
+    );
 
-  return result;
+    // check execution signal
+    if (execution.signal === 'success') {
+      return new BrainArch1ToolResult({
+        callId: input.call.id,
+        success: true,
+        output: JSON.stringify(execution.output),
+        error: null,
+      });
+    }
+
+    // handle error signals
+    return new BrainArch1ToolResult({
+      callId: input.call.id,
+      success: false,
+      output: `tool execution failed: ${execution.signal}`,
+      error: execution.signal,
+    });
+  } catch (error) {
+    // handle unexpected errors
+    const message = error instanceof Error ? error.message : String(error);
+    return new BrainArch1ToolResult({
+      callId: input.call.id,
+      success: false,
+      output: `tool execution error: ${message}`,
+      error: message,
+    });
+  }
 };

@@ -1,28 +1,21 @@
 import { exec } from 'child_process';
+import { BadRequestError } from 'helpful-errors';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { promisify } from 'util';
 import { z } from 'zod';
-
-import type { BrainArch1ToolCall } from '@src/domain.objects/BrainArch1/BrainArch1ToolCall';
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 const execAsync = promisify(exec);
 
 /**
  * .what = zod schema for bash exec tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaExecInput = z.object({
+const schemaExecInput = z.object({
   command: z.string().describe('The bash command to execute'),
   cwd: z
     .string()
     .optional()
-    .describe(
-      'Working directory for the command. Defaults to current directory.',
-    ),
+    .describe('Work directory for the command. Defaults to current directory.'),
   timeout: z
     .number()
     .optional()
@@ -30,97 +23,72 @@ export const schemaExecInput = z.object({
 });
 
 /**
- * .what = tool definition for executing bash commands
- * .why = enables agentic shell command execution
+ * .what = zod schema for bash exec tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionExec = new BrainArch1ToolDefinition({
-  name: 'bash_exec',
-  description:
-    'Executes a bash command and returns stdout/stderr. Use for git, npm, system commands, etc.',
-  schema: {
-    input: toJsonSchema(schemaExecInput),
-  },
-  strict: false,
+const schemaExecOutput = z.object({
+  stdout: z.string().describe('Standard output from command'),
+  stderr: z.string().describe('Standard error from command'),
 });
 
 /**
- * .what = executes bash commands
- * .why = enables shell operations for agentic workflows
+ * .what = bash exec tool declaration via rhachet's factory
+ * .why = enables agentic shell command execution
  */
-export const executeExec = async (input: {
-  call: BrainArch1ToolCall;
-}): Promise<BrainArch1ToolResult> => {
-  const args = input.call.input as {
-    command: string;
-    cwd?: string;
-    timeout?: number;
-  };
+export const toolBashExec = genBrainPlugToolDeclaration({
+  slug: 'bash_exec',
+  name: 'bash_exec',
+  description:
+    'Execute a bash command and return stdout/stderr. Use for git, npm, system commands, etc.',
+  schema: {
+    input: schemaExecInput,
+    output: schemaExecOutput,
+  },
+  execute: async ({ invocation }) => {
+    // validate command is provided
+    if (
+      !invocation.input.command ||
+      typeof invocation.input.command !== 'string'
+    )
+      throw new BadRequestError('command is required and must be a string');
 
-  // validate command is provided
-  if (!args.command || typeof args.command !== 'string') {
-    return new BrainArch1ToolResult({
-      callId: input.call.id,
-      success: false,
-      output: '',
-      error: 'command is required and must be a string',
-    });
-  }
+    // execute the command
+    const timeout = invocation.input.timeout ?? 30000;
+    const cwd = invocation.input.cwd ?? process.cwd();
 
-  // execute the command
-  try {
-    const timeout = args.timeout ?? 30000;
-    const cwd = args.cwd ?? process.cwd();
+    try {
+      const { stdout, stderr } = await execAsync(invocation.input.command, {
+        cwd,
+        timeout,
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
 
-    const { stdout, stderr } = await execAsync(args.command, {
-      cwd,
-      timeout,
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+      return {
+        stdout: stdout || '',
+        stderr: stderr || '',
+      };
+    } catch (error: unknown) {
+      // handle exec errors (non-zero exit, timeout, etc)
+      const execError = error as {
+        message?: string;
+        stdout?: string;
+        stderr?: string;
+        code?: number;
+        killed?: boolean;
+      };
 
-    // format output
-    const output = [
-      stdout ? `stdout:\n${stdout}` : null,
-      stderr ? `stderr:\n${stderr}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+      const errorMsg = [
+        execError.message ?? String(error),
+        execError.code !== undefined ? `exit code: ${execError.code}` : null,
+        execError.killed ? 'process was killed (timeout or signal)' : null,
+      ]
+        .filter(Boolean)
+        .join('; ');
 
-    return new BrainArch1ToolResult({
-      callId: input.call.id,
-      success: true,
-      output: output || '(no output)',
-      error: null,
-    });
-  } catch (error: unknown) {
-    // handle exec errors (non-zero exit, timeout, etc)
-    const execError = error as {
-      message?: string;
-      stdout?: string;
-      stderr?: string;
-      code?: number;
-      killed?: boolean;
-    };
-
-    const output = [
-      execError.stdout ? `stdout:\n${execError.stdout}` : null,
-      execError.stderr ? `stderr:\n${execError.stderr}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
-    const errorMsg = [
-      execError.message ?? String(error),
-      execError.code !== undefined ? `exit code: ${execError.code}` : null,
-      execError.killed ? 'process was killed (timeout or signal)' : null,
-    ]
-      .filter(Boolean)
-      .join('; ');
-
-    return new BrainArch1ToolResult({
-      callId: input.call.id,
-      success: false,
-      output: output || '',
-      error: errorMsg,
-    });
-  }
-};
+      throw new BadRequestError(errorMsg, {
+        stdout: execError.stdout ?? '',
+        stderr: execError.stderr ?? '',
+      });
+    }
+  },
+});

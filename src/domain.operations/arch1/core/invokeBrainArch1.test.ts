@@ -1,28 +1,58 @@
+import { dividePrice } from 'iso-price';
+import type { BrainAtom } from 'rhachet/brains';
 import { getError, given, then, when } from 'test-fns';
 
 import { genMockBrainArch1Context } from '@src/.test/genMockBrainArch1Context';
-import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
 import { BrainArch1MemoryTokenUsage } from '@src/domain.objects/BrainArch1/BrainArch1MemoryTokenUsage';
-import { BrainArch1Repl } from '@src/domain.objects/BrainArch1/BrainArch1Repl';
 import { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
 
-import { invokeBrainArch1 } from './invokeBrainArch1';
+import { type BrainArch1Config, invokeBrainArch1 } from './invokeBrainArch1';
 
-/**
- * .what = mock generate function for tests
- * .why = enables control of atom responses in unit tests
- */
-const mockGenerate = jest.fn();
+// mock the llm response function
+jest.mock(
+  '@src/domain.operations/arch1/llm/generateBrainArch1LlmResponse',
+  () => ({
+    generateBrainArch1LlmResponse: jest.fn(),
+  }),
+);
+
+import { generateBrainArch1LlmResponse } from '@src/domain.operations/arch1/llm/generateBrainArch1LlmResponse';
+
+const mockLlmResponse = generateBrainArch1LlmResponse as jest.Mock;
 
 /**
  * .what = creates a mock atom for tests
  * .why = enables unit tests without real SDK dependencies
  */
-const createMockAtom = (): BrainArch1Atom => ({
-  platform: 'test',
-  model: 'mock-model',
-  description: 'mock atom for tests',
-  generate: mockGenerate,
+const createMockAtom = (): BrainAtom => ({
+  repo: 'test',
+  slug: 'test/atom',
+  description: 'mock atom for test',
+  spec: {
+    cost: {
+      time: {
+        speed: { tokens: 100, per: { seconds: 1 } },
+        latency: { milliseconds: 100 },
+      },
+      cash: {
+        per: 'token',
+        input: dividePrice({ of: '$1', by: 1000000 }),
+        output: dividePrice({ of: '$1', by: 1000000 }),
+        cache: {
+          get: dividePrice({ of: '$0', by: 1000000 }),
+          set: dividePrice({ of: '$0', by: 1000000 }),
+        },
+      },
+    },
+    gain: {
+      size: { context: { tokens: 100000 } },
+      grades: { swe: 50, mmlu: 50 },
+      cutoff: '2025-01-01',
+      domain: 'ALL',
+      skills: { tooluse: true, vision: false },
+    },
+  },
+  ask: jest.fn(),
 });
 
 /**
@@ -40,19 +70,14 @@ describe('invokeBrainArch1', () => {
     cacheWriteTokens: null,
   });
 
-  const replBase = new BrainArch1Repl({
+  const configBase: BrainArch1Config = {
     atom: createMockAtom(),
     toolboxes: [],
-    memory: null,
-    permission: null,
-    constraints: {
-      maxIterations: 100,
-      maxTokens: 8192,
-    },
-    role: {
-      systemPrompt: null,
-    },
-  });
+    systemPrompt: null,
+    maxIterations: 100,
+    maxTokens: 8192,
+    permissionGuard: null,
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -61,7 +86,7 @@ describe('invokeBrainArch1', () => {
   given('[case1] simple input with no tools', () => {
     when('[t0] invokeBrainArch1 is called', () => {
       then('returns brain response', async () => {
-        (mockGenerate as jest.Mock).mockResolvedValue({
+        mockLlmResponse.mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Hello! How can I help you today?',
@@ -73,7 +98,7 @@ describe('invokeBrainArch1', () => {
 
         const result = await invokeBrainArch1(
           {
-            repl: replBase,
+            config: configBase,
             userInput: 'Hello',
           },
           getMockContext(),
@@ -91,7 +116,7 @@ describe('invokeBrainArch1', () => {
       then('returns clarification request', async () => {
         const result = await invokeBrainArch1(
           {
-            repl: replBase,
+            config: configBase,
             userInput: '',
           },
           getMockContext(),
@@ -100,13 +125,13 @@ describe('invokeBrainArch1', () => {
         expect(result.terminationReason).toBe('NATURAL_COMPLETION');
         expect(result.finalResponse).toContain('empty');
         expect(result.iterationCount).toBe(0);
-        expect(mockGenerate).not.toHaveBeenCalled();
+        expect(mockLlmResponse).not.toHaveBeenCalled();
       });
 
       then('handles whitespace-only input', async () => {
         const result = await invokeBrainArch1(
           {
-            repl: replBase,
+            config: configBase,
             userInput: '   \n\t  ',
           },
           getMockContext(),
@@ -114,7 +139,7 @@ describe('invokeBrainArch1', () => {
 
         expect(result.terminationReason).toBe('NATURAL_COMPLETION');
         expect(result.finalResponse).toContain('empty');
-        expect(mockGenerate).not.toHaveBeenCalled();
+        expect(mockLlmResponse).not.toHaveBeenCalled();
       });
     });
   });
@@ -127,12 +152,9 @@ describe('invokeBrainArch1', () => {
         const error = await getError(
           invokeBrainArch1(
             {
-              repl: {
-                ...replBase,
-                constraints: {
-                  ...replBase.constraints,
-                  maxTokens: 1000, // low limit
-                },
+              config: {
+                ...configBase,
+                maxTokens: 1000, // low limit
               },
               userInput: longInput,
             },
@@ -142,7 +164,7 @@ describe('invokeBrainArch1', () => {
 
         expect(error).toBeDefined();
         expect(error?.message).toContain('exceeds context window');
-        expect(mockGenerate).not.toHaveBeenCalled();
+        expect(mockLlmResponse).not.toHaveBeenCalled();
       });
     });
   });
@@ -150,7 +172,7 @@ describe('invokeBrainArch1', () => {
   given('[case4] custom system prompt', () => {
     when('[t0] invokeBrainArch1 is called with custom prompt', () => {
       then('uses custom system prompt', async () => {
-        (mockGenerate as jest.Mock).mockResolvedValue({
+        mockLlmResponse.mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Arr! How can I help ye?',
@@ -162,18 +184,16 @@ describe('invokeBrainArch1', () => {
 
         await invokeBrainArch1(
           {
-            repl: {
-              ...replBase,
-              role: {
-                systemPrompt: 'You are a pirate assistant.',
-              },
+            config: {
+              ...configBase,
+              systemPrompt: 'You are a pirate assistant.',
             },
             userInput: 'Hello',
           },
           getMockContext(),
         );
 
-        expect(mockGenerate).toHaveBeenCalledWith(
+        expect(mockLlmResponse).toHaveBeenCalledWith(
           expect.objectContaining({
             messages: expect.arrayContaining([
               expect.objectContaining({
@@ -191,7 +211,7 @@ describe('invokeBrainArch1', () => {
   given('[case5] conversation history provided', () => {
     when('[t0] invokeBrainArch1 is called with history', () => {
       then('includes history in messages', async () => {
-        (mockGenerate as jest.Mock).mockResolvedValue({
+        mockLlmResponse.mockResolvedValue({
           message: new BrainArch1SessionMessage({
             role: 'assistant',
             content: 'Your name is Alice.',
@@ -218,14 +238,14 @@ describe('invokeBrainArch1', () => {
 
         await invokeBrainArch1(
           {
-            repl: replBase,
+            config: configBase,
             userInput: 'What is my name?',
             conversationHistory: history,
           },
           getMockContext(),
         );
 
-        const callArgs = (mockGenerate as jest.Mock).mock.calls[0][0];
+        const callArgs = mockLlmResponse.mock.calls[0][0];
         expect(callArgs.messages).toHaveLength(4); // system + 2 history + user
         expect(callArgs.messages[1].content).toBe('My name is Alice.');
         expect(callArgs.messages[2].content).toBe('Nice to meet you, Alice!');

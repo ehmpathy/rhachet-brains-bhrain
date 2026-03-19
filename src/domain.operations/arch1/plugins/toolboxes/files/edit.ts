@@ -1,17 +1,13 @@
 import * as fs from 'fs/promises';
+import { BadRequestError } from 'helpful-errors';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { z } from 'zod';
-
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
  * .what = zod schema for edit tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaEditInput = z.object({
+const schemaEditInput = z.object({
   path: z.string().describe('The absolute path to the file to edit'),
   old_string: z.string().describe('The exact string to find and replace'),
   new_string: z.string().describe('The string to replace it with'),
@@ -24,79 +20,60 @@ export const schemaEditInput = z.object({
 });
 
 /**
- * .what = tool definition for editing file contents via string replacement
- * .why = enables the brain to make precise changes to existing files
+ * .what = zod schema for edit tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionEdit = new BrainArch1ToolDefinition({
-  name: 'edit',
-  description:
-    'Performs exact string replacement in a file. The old_string must be unique in the file unless replace_all is true.',
-  schema: {
-    input: toJsonSchema(schemaEditInput),
-  },
-  strict: false,
+const schemaEditOutput = z.object({
+  message: z.string().describe('Status message about the edit operation'),
 });
 
 /**
- * .what = executes the edit tool
- * .why = performs the actual file edit operation
+ * .what = edit tool declaration via rhachet's factory
+ * .why = enables the brain to make precise changes to extant files
  */
-export const executeToolEdit = async (input: {
-  callId: string;
-  args: {
-    path: string;
-    old_string: string;
-    new_string: string;
-    replace_all?: boolean;
-  };
-}): Promise<BrainArch1ToolResult> => {
-  try {
+export const toolEdit = genBrainPlugToolDeclaration({
+  slug: 'edit',
+  name: 'edit',
+  description:
+    'Perform exact string replacement in a file. The old_string must be unique in the file unless replace_all is true.',
+  schema: {
+    input: schemaEditInput,
+    output: schemaEditOutput,
+  },
+  execute: async ({ invocation }) => {
     // read current content
-    const content = await fs.readFile(input.args.path, 'utf-8');
+    const content = await fs.readFile(invocation.input.path, 'utf-8');
 
     // count occurrences
-    const occurrences = content.split(input.args.old_string).length - 1;
+    const occurrences = content.split(invocation.input.old_string).length - 1;
 
     // validate uniqueness
-    if (occurrences === 0) {
-      return new BrainArch1ToolResult({
-        callId: input.callId,
-        success: false,
-        output: '',
-        error: 'old_string not found in file',
+    if (occurrences === 0)
+      throw new BadRequestError('old_string not found in file', {
+        path: invocation.input.path,
       });
-    }
 
-    if (occurrences > 1 && !input.args.replace_all) {
-      return new BrainArch1ToolResult({
-        callId: input.callId,
-        success: false,
-        output: '',
-        error: `old_string found ${occurrences} times. use replace_all=true or provide more context.`,
-      });
-    }
+    if (occurrences > 1 && !invocation.input.replace_all)
+      throw new BadRequestError(
+        `old_string found ${occurrences} times. use replace_all=true or provide more context.`,
+        { path: invocation.input.path, occurrences },
+      );
 
     // perform replacement
-    const newContent = input.args.replace_all
-      ? content.split(input.args.old_string).join(input.args.new_string)
-      : content.replace(input.args.old_string, input.args.new_string);
+    const newContent = invocation.input.replace_all
+      ? content
+          .split(invocation.input.old_string)
+          .join(invocation.input.new_string)
+      : content.replace(
+          invocation.input.old_string,
+          invocation.input.new_string,
+        );
 
     // write updated content
-    await fs.writeFile(input.args.path, newContent, 'utf-8');
+    await fs.writeFile(invocation.input.path, newContent, 'utf-8');
 
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: true,
-      output: `replaced ${input.args.replace_all ? occurrences : 1} occurrence(s)`,
-      error: null,
-    });
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: false,
-      output: '',
-      error: `failed to edit file: ${error}`,
-    });
-  }
-};
+    return {
+      message: `replaced ${invocation.input.replace_all ? occurrences : 1} occurrence(s)`,
+    };
+  },
+});

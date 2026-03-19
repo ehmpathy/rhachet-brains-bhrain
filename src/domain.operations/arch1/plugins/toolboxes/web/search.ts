@@ -1,17 +1,14 @@
+import { BadRequestError } from 'helpful-errors';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { z } from 'zod';
 
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
  * .what = zod schema for websearch tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaWebsearchInput = z.object({
+const schemaWebsearchInput = z.object({
   query: z.string().describe('The search query to look up'),
   num_results: z
     .number()
@@ -20,17 +17,13 @@ export const schemaWebsearchInput = z.object({
 });
 
 /**
- * .what = tool definition for web search
- * .why = enables the brain to search the web for information
+ * .what = zod schema for websearch tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionSearch = new BrainArch1ToolDefinition({
-  name: 'websearch',
-  description:
-    'Search the web for information. Returns search results with titles, URLs, and snippets. Use this to find current information, research topics, and gather sources for citations.',
-  schema: {
-    input: toJsonSchema(schemaWebsearchInput),
-  },
-  strict: false,
+const schemaWebsearchOutput = z.object({
+  results: z
+    .string()
+    .describe('Search results with titles, URLs, and snippets'),
 });
 
 /**
@@ -46,7 +39,7 @@ interface TavilySearchResult {
 
 /**
  * .what = Tavily API response shape
- * .why = typed response for parsing
+ * .why = typed response for parse
  */
 interface TavilySearchResponse {
   query: string;
@@ -54,39 +47,35 @@ interface TavilySearchResponse {
 }
 
 /**
- * .what = executes web search using Tavily API
- * .why = provides reliable web search with proper API authentication
+ * .what = websearch tool declaration via rhachet's factory
+ * .why = enables the brain to search the web for information
  *
  * .note = requires TAVILY_API_KEY in context.creds.tavily
  */
-export const executeToolSearch = async (
-  input: {
-    callId: string;
-    args: { query: string; num_results?: number };
+export const toolWebSearch = genBrainPlugToolDeclaration({
+  slug: 'websearch',
+  name: 'websearch',
+  description:
+    'Search the web for information. Returns search results with titles, URLs, and snippets. Use this to find current information, research topics, and gather sources for citations.',
+  schema: {
+    input: schemaWebsearchInput,
+    output: schemaWebsearchOutput,
   },
-  context: BrainArch1Context,
-): Promise<BrainArch1ToolResult> => {
-  const { callId, args } = input;
-  const numResults = Math.min(args.num_results ?? 10, 20);
+  execute: async ({ invocation }, context: unknown) => {
+    const numResults = Math.min(invocation.input.num_results ?? 10, 20);
 
-  // check for api key
-  if (!context.creds.tavily.apiKey) {
-    return new BrainArch1ToolResult({
-      callId,
-      success: false,
-      output: '',
-      error: 'TAVILY_API_KEY not configured',
-    });
-  }
+    // cast context and check for api key
+    const ctx = context as BrainArch1Context;
+    if (!ctx?.creds?.tavily?.apiKey)
+      throw new BadRequestError('TAVILY_API_KEY not configured');
 
-  try {
     // call Tavily search API
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        api_key: context.creds.tavily.apiKey,
-        query: args.query,
+        api_key: ctx.creds.tavily.apiKey,
+        query: invocation.input.query,
         max_results: numResults,
         search_depth: 'basic',
         include_answer: false,
@@ -96,24 +85,17 @@ export const executeToolSearch = async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      return new BrainArch1ToolResult({
-        callId,
-        success: false,
-        output: '',
-        error: `tavily search failed: ${response.status} ${response.statusText} - ${errorText}`,
-      });
+      throw new Error(
+        `tavily search failed: ${response.status} ${response.statusText} - ${errorText}`,
+      );
     }
 
     const data = (await response.json()) as TavilySearchResponse;
 
-    if (!data.results || data.results.length === 0) {
-      return new BrainArch1ToolResult({
-        callId,
-        success: true,
-        output: `No results found for query: "${args.query}"`,
-        error: null,
-      });
-    }
+    if (!data.results || data.results.length === 0)
+      return {
+        results: `No results found for query: "${invocation.input.query}"`,
+      };
 
     // format results for the brain
     const formattedResults = data.results
@@ -122,18 +104,8 @@ export const executeToolSearch = async (
       )
       .join('\n\n');
 
-    return new BrainArch1ToolResult({
-      callId,
-      success: true,
-      output: `Found ${data.results.length} results for "${args.query}":\n\n${formattedResults}`,
-      error: null,
-    });
-  } catch (error) {
-    return new BrainArch1ToolResult({
-      callId,
-      success: false,
-      output: '',
-      error: `search failed: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
-};
+    return {
+      results: `Found ${data.results.length} results for "${invocation.input.query}":\n\n${formattedResults}`,
+    };
+  },
+});

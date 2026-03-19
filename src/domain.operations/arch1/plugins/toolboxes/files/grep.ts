@@ -1,20 +1,15 @@
 import { exec } from 'child_process';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { promisify } from 'util';
 import { z } from 'zod';
-
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 const execAsync = promisify(exec);
 
 /**
  * .what = zod schema for grep tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaGrepInput = z.object({
+const schemaGrepInput = z.object({
   pattern: z.string().describe('The regex pattern to search for'),
   path: z
     .string()
@@ -33,88 +28,67 @@ export const schemaGrepInput = z.object({
 });
 
 /**
- * .what = tool definition for searching file contents by pattern
- * .why = enables the brain to search for text patterns in files
+ * .what = zod schema for grep tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionGrep = new BrainArch1ToolDefinition({
-  name: 'grep',
-  description:
-    'Searches for a regex pattern in files. Returns matching lines with file paths.',
-  schema: {
-    input: toJsonSchema(schemaGrepInput),
-  },
-  strict: false,
+const schemaGrepOutput = z.object({
+  matches: z.string().describe('Matched lines with file paths'),
 });
 
 /**
- * .what = executes the grep tool
- * .why = performs the actual content search operation
+ * .what = grep tool declaration via rhachet's factory
+ * .why = enables the brain to search for text patterns in files
  */
-export const executeToolGrep = async (input: {
-  callId: string;
-  args: {
-    pattern: string;
-    path?: string;
-    glob?: string;
-    case_insensitive?: boolean;
-  };
-}): Promise<BrainArch1ToolResult> => {
-  try {
+export const toolGrep = genBrainPlugToolDeclaration({
+  slug: 'grep',
+  name: 'grep',
+  description:
+    'Search for a regex pattern in files. Returns matched lines with file paths.',
+  schema: {
+    input: schemaGrepInput,
+    output: schemaGrepOutput,
+  },
+  execute: async ({ invocation }) => {
     // build rg command
     const args: string[] = ['rg'];
 
     // add pattern
-    args.push('--regexp', input.args.pattern);
+    args.push('--regexp', invocation.input.pattern);
 
     // add case insensitive flag
-    if (input.args.case_insensitive) {
+    if (invocation.input.case_insensitive) {
       args.push('-i');
     }
 
     // add glob filter
-    if (input.args.glob) {
-      args.push('--glob', input.args.glob);
+    if (invocation.input.glob) {
+      args.push('--glob', invocation.input.glob);
     }
 
     // add line numbers
     args.push('-n');
 
     // add path
-    args.push(input.args.path ?? '.');
+    args.push(invocation.input.path ?? '.');
 
-    // execute ripgrep
-    const { stdout } = await execAsync(args.join(' '), {
-      maxBuffer: 1024 * 1024 * 10, // 10MB
-      cwd: process.cwd(),
-    });
-
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: true,
-      output: stdout.trim() || 'no matches found',
-      error: null,
-    });
-  } catch (err) {
-    // ripgrep returns exit code 1 when no matches found
-    if (
-      err instanceof Error &&
-      'code' in err &&
-      (err as NodeJS.ErrnoException).code === '1'
-    ) {
-      return new BrainArch1ToolResult({
-        callId: input.callId,
-        success: true,
-        output: 'no matches found',
-        error: null,
+    try {
+      // execute ripgrep
+      const { stdout } = await execAsync(args.join(' '), {
+        maxBuffer: 1024 * 1024 * 10, // 10MB
+        cwd: process.cwd(),
       });
-    }
 
-    const error = err instanceof Error ? err.message : String(err);
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: false,
-      output: '',
-      error: `failed to grep: ${error}`,
-    });
-  }
-};
+      return { matches: stdout.trim() || 'no matches found' };
+    } catch (err) {
+      // ripgrep returns exit code 1 when no matches found
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as NodeJS.ErrnoException).code === '1'
+      ) {
+        return { matches: 'no matches found' };
+      }
+      throw err;
+    }
+  },
+});

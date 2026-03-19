@@ -1,92 +1,82 @@
+import type { BrainPlugToolDefinition } from 'rhachet/brains';
 import { getError, given, then, when } from 'test-fns';
-
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
-import { BrainArch1ToolDefinition } from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
+import { z } from 'zod';
 
 import { mergeBrainArch1Toolboxes } from './mergeBrainArch1Toolboxes';
 
 /**
  * .what = unit tests for mergeBrainArch1Toolboxes
- * .why = verify correct merging and duplicate detection
+ * .why = verify correct merge and duplicate detection
  */
 describe('mergeBrainArch1Toolboxes', () => {
-  const createMockToolbox = (
-    name: string,
-    tools: { name: string; description: string }[],
-  ): BrainArch1Toolbox => ({
-    name,
-    definitions: tools.map(
-      (t) =>
-        new BrainArch1ToolDefinition({
-          name: t.name,
-          description: t.description,
-          schema: { input: { type: 'object', properties: {}, required: [] } },
-          strict: false,
-        }),
-    ),
-    execute: async () =>
-      new BrainArch1ToolResult({
-        callId: 'test',
-        success: true,
-        output: 'mock output',
-        error: null,
-      }),
+  const createMockTool = (
+    slug: string,
+    description: string,
+  ): BrainPlugToolDefinition<unknown, unknown, 'repl'> => ({
+    slug,
+    name: slug,
+    description,
+    schema: { input: z.object({}), output: z.unknown() },
+    execute: jest.fn().mockResolvedValue({
+      signal: 'success' as const,
+      output: { result: 'mock' },
+      time: { ms: 1 },
+    }),
   });
 
   given('[case1] multiple toolboxes with distinct tools', () => {
-    const filesBox = createMockToolbox('files', [
-      { name: 'read', description: 'read file' },
-      { name: 'write', description: 'write file' },
-    ]);
-    const bashBox = createMockToolbox('bash', [
-      { name: 'execute', description: 'run bash command' },
-    ]);
+    const filesToolbox: BrainPlugToolDefinition<unknown, unknown, 'repl'>[] = [
+      createMockTool('read', 'read file'),
+      createMockTool('write', 'write file'),
+    ];
+    const bashToolbox: BrainPlugToolDefinition<unknown, unknown, 'repl'>[] = [
+      createMockTool('bash_exec', 'run bash command'),
+    ];
 
     when('[t0] merge is called', () => {
-      then('returns merged definitions', () => {
+      then('returns merged tools', () => {
         const result = mergeBrainArch1Toolboxes({
-          toolboxes: [filesBox, bashBox],
+          toolboxes: [filesToolbox, bashToolbox],
         });
 
-        expect(result.definitions).toHaveLength(3);
-        expect(result.definitions.map((d) => d.name)).toEqual([
+        expect(result.tools).toHaveLength(3);
+        expect(result.tools.map((d) => d.slug)).toEqual([
           'read',
           'write',
-          'execute',
+          'bash_exec',
         ]);
       });
 
-      then('maps each tool to its toolbox', () => {
+      then('maps each tool by slug', () => {
         const result = mergeBrainArch1Toolboxes({
-          toolboxes: [filesBox, bashBox],
+          toolboxes: [filesToolbox, bashToolbox],
         });
 
-        expect(result.toolboxByToolName.get('read')).toBe(filesBox);
-        expect(result.toolboxByToolName.get('write')).toBe(filesBox);
-        expect(result.toolboxByToolName.get('execute')).toBe(bashBox);
+        expect(result.toolBySlug.get('read')).toBe(filesToolbox[0]);
+        expect(result.toolBySlug.get('write')).toBe(filesToolbox[1]);
+        expect(result.toolBySlug.get('bash_exec')).toBe(bashToolbox[0]);
       });
     });
   });
 
   given('[case2] empty toolboxes array', () => {
     when('[t0] merge is called', () => {
-      then('returns empty definitions', () => {
+      then('returns empty tools', () => {
         const result = mergeBrainArch1Toolboxes({ toolboxes: [] });
 
-        expect(result.definitions).toHaveLength(0);
-        expect(result.toolboxByToolName.size).toBe(0);
+        expect(result.tools).toHaveLength(0);
+        expect(result.toolBySlug.size).toBe(0);
       });
     });
   });
 
-  given('[case3] toolboxes with duplicate tool names', () => {
-    const box1 = createMockToolbox('files', [
-      { name: 'read', description: 'read from files' },
-    ]);
-    const box2 = createMockToolbox('network', [
-      { name: 'read', description: 'read from network' },
-    ]);
+  given('[case3] toolboxes with duplicate tool slugs', () => {
+    const box1: BrainPlugToolDefinition<unknown, unknown, 'repl'>[] = [
+      createMockTool('read', 'read from files'),
+    ];
+    const box2: BrainPlugToolDefinition<unknown, unknown, 'repl'>[] = [
+      createMockTool('read', 'read from network'),
+    ];
 
     when('[t0] merge is called', () => {
       then('throws bad request error', async () => {
@@ -95,22 +85,22 @@ describe('mergeBrainArch1Toolboxes', () => {
         );
 
         expect(error).toBeDefined();
-        expect(error?.message).toContain('duplicate tool name');
+        expect(error?.message).toContain('duplicate tool slug');
       });
     });
   });
 
   given('[case4] single toolbox', () => {
-    const singleBox = createMockToolbox('files', [
-      { name: 'read', description: 'read file' },
-    ]);
+    const singleToolbox: BrainPlugToolDefinition<unknown, unknown, 'repl'>[] = [
+      createMockTool('read', 'read file'),
+    ];
 
     when('[t0] merge is called', () => {
-      then('returns single toolbox definitions', () => {
-        const result = mergeBrainArch1Toolboxes({ toolboxes: [singleBox] });
+      then('returns single toolbox tools', () => {
+        const result = mergeBrainArch1Toolboxes({ toolboxes: [singleToolbox] });
 
-        expect(result.definitions).toHaveLength(1);
-        expect(result.toolboxByToolName.get('read')).toBe(singleBox);
+        expect(result.tools).toHaveLength(1);
+        expect(result.toolBySlug.get('read')).toBe(singleToolbox[0]);
       });
     });
   });

@@ -1,10 +1,9 @@
-import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
+import type { BrainAtom, BrainPlugToolDefinition } from 'rhachet/brains';
+
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
 import { BrainArch1LoopIteration } from '@src/domain.objects/BrainArch1/BrainArch1LoopIteration';
 import type { BrainArch1PermissionGuard } from '@src/domain.objects/BrainArch1/BrainArch1PermissionGuard';
 import { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
-import type { BrainArch1ToolDefinition } from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
 import { generateBrainArch1LlmResponse } from '@src/domain.operations/arch1/llm/generateBrainArch1LlmResponse';
 import { executeBrainArch1ToolCall } from '@src/domain.operations/arch1/tool/executeBrainArch1ToolCall';
 
@@ -25,10 +24,10 @@ export interface IterateBrainArch1LoopResult {
  */
 export const iterateBrainArch1Loop = async (
   input: {
-    atom: BrainArch1Atom;
+    atom: BrainAtom;
     messages: BrainArch1SessionMessage[];
-    definitions: BrainArch1ToolDefinition[];
-    toolboxByToolName: Map<string, BrainArch1Toolbox>;
+    tools: BrainPlugToolDefinition[];
+    toolBySlug: Map<string, BrainPlugToolDefinition>;
     permissionGuard: BrainArch1PermissionGuard;
     iterationNumber: number;
     maxTokens?: number;
@@ -42,7 +41,7 @@ export const iterateBrainArch1Loop = async (
     {
       atom: input.atom,
       messages: input.messages,
-      tools: input.definitions,
+      tools: input.tools,
       maxTokens: input.maxTokens,
     },
     context,
@@ -77,7 +76,7 @@ export const iterateBrainArch1Loop = async (
       executeBrainArch1ToolCall(
         {
           call,
-          toolboxByToolName: input.toolboxByToolName,
+          toolBySlug: input.toolBySlug,
           permissionGuard: input.permissionGuard,
         },
         context,

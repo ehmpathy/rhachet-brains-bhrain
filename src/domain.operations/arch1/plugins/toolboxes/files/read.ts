@@ -1,23 +1,18 @@
 import * as fs from 'fs/promises';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { z } from 'zod';
-
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
  * .what = zod schema for read tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaReadInput = z.object({
+const schemaReadInput = z.object({
   path: z.string().describe('The absolute path to the file to read'),
   offset: z
     .number()
     .optional()
     .describe(
-      'Optional line number to start reading from (1-indexed). Defaults to 1.',
+      'Optional line number to start read from (1-indexed). Defaults to 1.',
     ),
   limit: z
     .number()
@@ -28,59 +23,47 @@ export const schemaReadInput = z.object({
 });
 
 /**
- * .what = tool definition for reading file contents
- * .why = enables the brain to read files from the filesystem
+ * .what = zod schema for read tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionRead = new BrainArch1ToolDefinition({
-  name: 'read',
-  description:
-    'Reads the contents of a file at the specified path. Returns the file contents as a string.',
-  schema: {
-    input: toJsonSchema(schemaReadInput),
-  },
-  strict: false,
+const schemaReadOutput = z.object({
+  content: z.string().describe('The file contents with line numbers'),
 });
 
 /**
- * .what = executes the read tool
- * .why = performs the actual file read operation
+ * .what = read tool declaration via rhachet's factory
+ * .why = enables the brain to read files from the filesystem
+ *
+ * .note = uses genBrainPlugToolDeclaration for type-safe tool definition and execution
  */
-export const executeToolRead = async (input: {
-  callId: string;
-  args: { path: string; offset?: number; limit?: number };
-}): Promise<BrainArch1ToolResult> => {
-  try {
+export const toolRead = genBrainPlugToolDeclaration({
+  slug: 'read',
+  name: 'read',
+  description:
+    'Read the contents of a file at the specified path. Returns the file contents as a string.',
+  schema: {
+    input: schemaReadInput,
+    output: schemaReadOutput,
+  },
+  execute: async ({ invocation }) => {
     // read file contents
-    const content = await fs.readFile(input.args.path, 'utf-8');
+    const content = await fs.readFile(invocation.input.path, 'utf-8');
 
     // handle offset and limit
     const lines = content.split('\n');
-    const offset = input.args.offset ?? 1;
+    const offset = invocation.input.offset ?? 1;
     const startIndex = Math.max(0, offset - 1);
-    const endIndex = input.args.limit
-      ? startIndex + input.args.limit
+    const endIndex = invocation.input.limit
+      ? startIndex + invocation.input.limit
       : lines.length;
 
     const selectedLines = lines.slice(startIndex, endIndex);
 
     // format output with line numbers
-    const output = selectedLines
+    const formattedContent = selectedLines
       .map((line, i) => `${String(startIndex + i + 1).padStart(6)}→${line}`)
       .join('\n');
 
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: true,
-      output,
-      error: null,
-    });
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: false,
-      output: '',
-      error: `failed to read file: ${error}`,
-    });
-  }
-};
+    return { content: formattedContent };
+  },
+});

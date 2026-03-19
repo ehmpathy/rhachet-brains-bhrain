@@ -1,12 +1,21 @@
 import { BadRequestError } from 'helpful-errors';
 import { asIsoPrice, dividePrice } from 'iso-price';
-import type { BrainOutput, BrainOutputMetrics, BrainSpec } from 'rhachet';
+import type {
+  AsBrainPromptFor,
+  BrainAtom,
+  BrainOutput,
+  BrainOutputMetrics,
+  BrainSpec,
+} from 'rhachet';
 import { BrainEpisode, BrainRepl, BrainSeries } from 'rhachet';
+import type { BrainPlugs } from 'rhachet/brains';
+import type { z } from 'zod';
 
-import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
-import { BrainArch1Repl } from '@src/domain.objects/BrainArch1/BrainArch1Repl';
-import { invokeBrainArch1 } from '@src/domain.operations/arch1/core/invokeBrainArch1';
+import {
+  type BrainArch1Config,
+  invokeBrainArch1,
+} from '@src/domain.operations/arch1/core/invokeBrainArch1';
 import { toolboxBash } from '@src/domain.operations/arch1/plugins/toolboxes/bash';
 import { toolboxFiles } from '@src/domain.operations/arch1/plugins/toolboxes/files';
 import { toolboxWeb } from '@src/domain.operations/arch1/plugins/toolboxes/web';
@@ -129,7 +138,7 @@ const buildZeroMetrics = (input: {
  */
 export const genBrainRepl = async (input: {
   slug: `bhrain/arch1@${string}`;
-  atom: BrainArch1Atom;
+  atom: BrainAtom;
   context: BrainArch1Context;
 }): Promise<BrainRepl> => {
   // parse composite slug
@@ -158,23 +167,32 @@ export const genBrainRepl = async (input: {
     slug: input.slug,
     spec: BHRAIN_ARCH1_SPEC,
     description: `bhrain agentic brain via BrainArch1, atom: ${atomSlug}`,
-    ask: async <TOutput>(askInput: {
-      prompt: string;
-      schema: { output: unknown };
+    ask: async <TOutput, TPlugs extends BrainPlugs = BrainPlugs>(askInput: {
+      on?: { episode?: BrainEpisode; series?: BrainSeries };
+      plugs?: TPlugs;
+      role?: { briefs?: unknown[] };
+      prompt: AsBrainPromptFor<TPlugs>;
+      schema: { output: z.Schema<TOutput> };
     }) => {
-      // build internal repl config with readonly toolboxes
-      const repl = new BrainArch1Repl({
+      // build config with readonly toolboxes (no intermediate domain object)
+      const config: BrainArch1Config = {
         atom: input.atom,
-        role: { systemPrompt: null },
+        systemPrompt: null,
         toolboxes: READONLY_TOOLBOXES,
-        constraints: { maxIterations: 50, maxTokens: 200000 },
-        memory: null,
-        permission: null,
-      });
+        maxIterations: 50,
+        maxTokens: 200000,
+        permissionGuard: null,
+      };
+
+      // extract prompt as string (tool continuations serialized as JSON)
+      const userInput =
+        typeof askInput.prompt === 'string'
+          ? askInput.prompt
+          : JSON.stringify(askInput.prompt);
 
       // invoke BrainArch1
       const result = await invokeBrainArch1(
-        { repl, userInput: askInput.prompt },
+        { config, userInput },
         input.context,
       );
 
@@ -182,8 +200,9 @@ export const genBrainRepl = async (input: {
       const episodeHash = `bhrain-ask-${Date.now()}`;
 
       // transform to BrainOutput
-      const output: BrainOutput<TOutput, 'repl'> = {
+      const output: BrainOutput<TOutput, 'repl', TPlugs> = {
         output: JSON.parse(result.finalResponse ?? '{}') as TOutput,
+        calls: null,
         metrics: buildZeroMetrics({
           inputTokens: result.totalTokenUsage.inputTokens,
           outputTokens: result.totalTokenUsage.outputTokens,
@@ -203,23 +222,32 @@ export const genBrainRepl = async (input: {
       };
       return output;
     },
-    act: async <TOutput>(actInput: {
-      prompt: string;
-      schema: { output: unknown };
+    act: async <TOutput, TPlugs extends BrainPlugs = BrainPlugs>(actInput: {
+      on?: { episode?: BrainEpisode; series?: BrainSeries };
+      plugs?: TPlugs;
+      role?: { briefs?: unknown[] };
+      prompt: AsBrainPromptFor<TPlugs>;
+      schema: { output: z.Schema<TOutput> };
     }) => {
-      // build internal repl config with read+write toolboxes
-      const repl = new BrainArch1Repl({
+      // build config with read+write toolboxes (no intermediate domain object)
+      const config: BrainArch1Config = {
         atom: input.atom,
-        role: { systemPrompt: null },
+        systemPrompt: null,
         toolboxes: READWRITE_TOOLBOXES,
-        constraints: { maxIterations: 50, maxTokens: 200000 },
-        memory: null,
-        permission: null,
-      });
+        maxIterations: 50,
+        maxTokens: 200000,
+        permissionGuard: null,
+      };
+
+      // extract prompt as string (tool continuations serialized as JSON)
+      const userInput =
+        typeof actInput.prompt === 'string'
+          ? actInput.prompt
+          : JSON.stringify(actInput.prompt);
 
       // invoke BrainArch1
       const result = await invokeBrainArch1(
-        { repl, userInput: actInput.prompt },
+        { config, userInput },
         input.context,
       );
 
@@ -227,8 +255,9 @@ export const genBrainRepl = async (input: {
       const episodeHash = `bhrain-act-${Date.now()}`;
 
       // transform to BrainOutput
-      const output: BrainOutput<TOutput, 'repl'> = {
+      const output: BrainOutput<TOutput, 'repl', TPlugs> = {
         output: JSON.parse(result.finalResponse ?? '{}') as TOutput,
+        calls: null,
         metrics: buildZeroMetrics({
           inputTokens: result.totalTokenUsage.inputTokens,
           outputTokens: result.totalTokenUsage.outputTokens,

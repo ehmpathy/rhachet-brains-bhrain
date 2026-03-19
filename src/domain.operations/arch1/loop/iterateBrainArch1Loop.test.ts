@@ -1,18 +1,18 @@
+import { dividePrice } from 'iso-price';
+import type { BrainAtom, BrainPlugToolDefinition } from 'rhachet/brains';
 import { given, then, when } from 'test-fns';
+import { z } from 'zod';
 
 import { genMockBrainArch1Context } from '@src/.test/genMockBrainArch1Context';
-import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
 import { BrainArch1MemoryTokenUsage } from '@src/domain.objects/BrainArch1/BrainArch1MemoryTokenUsage';
 import { BrainArch1PermissionDecision } from '@src/domain.objects/BrainArch1/BrainArch1PermissionDecision';
 import type { BrainArch1PermissionGuard } from '@src/domain.objects/BrainArch1/BrainArch1PermissionGuard';
 import { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
 import { BrainArch1ToolCall } from '@src/domain.objects/BrainArch1/BrainArch1ToolCall';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 import { iterateBrainArch1Loop } from './iterateBrainArch1Loop';
 
-// mock the generate function
+// mock the llm response function
 jest.mock(
   '@src/domain.operations/arch1/llm/generateBrainArch1LlmResponse',
   () => ({
@@ -29,11 +29,50 @@ import { generateBrainArch1LlmResponse } from '@src/domain.operations/arch1/llm/
 describe('iterateBrainArch1Loop', () => {
   const getMockContext = genMockBrainArch1Context;
 
-  const createMockAtom = (): BrainArch1Atom => ({
-    platform: 'test',
-    model: 'test-atom',
-    description: 'mock atom for testing',
-    generate: jest.fn(),
+  const createMockAtom = (): BrainAtom => ({
+    repo: 'test',
+    slug: 'test/atom',
+    description: 'mock atom for test',
+    spec: {
+      cost: {
+        time: {
+          speed: { tokens: 100, per: { seconds: 1 } },
+          latency: { milliseconds: 100 },
+        },
+        cash: {
+          per: 'token',
+          input: dividePrice({ of: '$1', by: 1000000 }),
+          output: dividePrice({ of: '$1', by: 1000000 }),
+          cache: {
+            get: dividePrice({ of: '$0', by: 1000000 }),
+            set: dividePrice({ of: '$0', by: 1000000 }),
+          },
+        },
+      },
+      gain: {
+        size: { context: { tokens: 100000 } },
+        grades: { swe: 50, mmlu: 50 },
+        cutoff: '2025-01-01',
+        domain: 'ALL',
+        skills: { tooluse: true, vision: false },
+      },
+    },
+    ask: jest.fn(),
+  });
+
+  const createMockTool = (
+    slug: string,
+    output: unknown,
+  ): BrainPlugToolDefinition<unknown, unknown, 'repl'> => ({
+    slug,
+    name: slug,
+    description: `${slug} description`,
+    schema: { input: z.object({}), output: z.unknown() },
+    execute: jest.fn().mockResolvedValue({
+      signal: 'success' as const,
+      output,
+      time: { ms: 1 },
+    }),
   });
 
   const atom = createMockAtom();
@@ -87,8 +126,8 @@ describe('iterateBrainArch1Loop', () => {
           {
             atom,
             messages: initialMessages,
-            definitions: [],
-            toolboxByToolName: new Map(),
+            tools: [],
+            toolBySlug: new Map(),
             permissionGuard: createMockPermissionGuard(),
             iterationNumber: 0,
           },
@@ -104,18 +143,7 @@ describe('iterateBrainArch1Loop', () => {
   });
 
   given('[case2] llm responds with tool calls', () => {
-    const filesBox: BrainArch1Toolbox = {
-      name: 'files',
-      definitions: [],
-      execute: jest.fn().mockResolvedValue(
-        new BrainArch1ToolResult({
-          callId: 'call-1',
-          success: true,
-          output: 'file contents here',
-          error: null,
-        }),
-      ),
-    };
+    const readTool = createMockTool('read', { content: 'file contents here' });
 
     when('[t0] iterate is called', () => {
       then('executes tools and appends results', async () => {
@@ -145,14 +173,14 @@ describe('iterateBrainArch1Loop', () => {
           }),
         ];
 
-        const toolboxByToolName = new Map([['read', filesBox]]);
+        const toolBySlug = new Map([['read', readTool]]);
 
         const result = await iterateBrainArch1Loop(
           {
             atom,
             messages: initialMessages,
-            definitions: [],
-            toolboxByToolName,
+            tools: [readTool],
+            toolBySlug,
             permissionGuard: createMockPermissionGuard(),
             iterationNumber: 0,
           },
@@ -162,36 +190,35 @@ describe('iterateBrainArch1Loop', () => {
         expect(result.messages).toHaveLength(3);
         expect(result.messages[1]?.role).toBe('assistant');
         expect(result.messages[2]?.role).toBe('tool');
-        expect(result.messages[2]?.content).toBe('file contents here');
+        expect(result.messages[2]?.content).toContain('file contents here');
         expect(result.iteration.hadToolCalls).toBe(true);
         expect(result.iteration.toolCallCount).toBe(1);
-        expect(filesBox.execute).toHaveBeenCalled();
+        expect(readTool.execute).toHaveBeenCalled();
       });
     });
   });
 
   given('[case3] llm responds with multiple tool calls', () => {
-    const filesBox: BrainArch1Toolbox = {
-      name: 'files',
-      definitions: [],
+    const readTool1 = createMockTool('read', { content: 'file1 contents' });
+    const readTool2 = createMockTool('read', { content: 'file2 contents' });
+    // use same tool for both calls
+    const readTool: BrainPlugToolDefinition<unknown, unknown, 'repl'> = {
+      slug: 'read',
+      name: 'read',
+      description: 'read file',
+      schema: { input: z.object({}), output: z.unknown() },
       execute: jest
         .fn()
-        .mockResolvedValueOnce(
-          new BrainArch1ToolResult({
-            callId: 'call-1',
-            success: true,
-            output: 'file1 contents',
-            error: null,
-          }),
-        )
-        .mockResolvedValueOnce(
-          new BrainArch1ToolResult({
-            callId: 'call-2',
-            success: true,
-            output: 'file2 contents',
-            error: null,
-          }),
-        ),
+        .mockResolvedValueOnce({
+          signal: 'success' as const,
+          output: { content: 'file1 contents' },
+          time: { ms: 1 },
+        })
+        .mockResolvedValueOnce({
+          signal: 'success' as const,
+          output: { content: 'file2 contents' },
+          time: { ms: 1 },
+        }),
     };
 
     when('[t0] iterate is called', () => {
@@ -227,14 +254,14 @@ describe('iterateBrainArch1Loop', () => {
           }),
         ];
 
-        const toolboxByToolName = new Map([['read', filesBox]]);
+        const toolBySlug = new Map([['read', readTool]]);
 
         const result = await iterateBrainArch1Loop(
           {
             atom,
             messages: initialMessages,
-            definitions: [],
-            toolboxByToolName,
+            tools: [readTool],
+            toolBySlug,
             permissionGuard: createMockPermissionGuard(),
             iterationNumber: 0,
           },
@@ -246,7 +273,7 @@ describe('iterateBrainArch1Loop', () => {
         expect(result.messages[3]?.role).toBe('tool');
         expect(result.iteration.hadToolCalls).toBe(true);
         expect(result.iteration.toolCallCount).toBe(2);
-        expect(filesBox.execute).toHaveBeenCalledTimes(2);
+        expect(readTool.execute).toHaveBeenCalledTimes(2);
       });
     });
   });
