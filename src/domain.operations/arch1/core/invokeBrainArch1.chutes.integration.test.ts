@@ -17,7 +17,8 @@ import { toolboxFiles } from '@src/domain.operations/arch1/plugins/toolboxes/fil
  * .why = verify bhrain works with chutes BrainAtom (deepseek-v3.2)
  *
  * .note = requires CHUTES_API_KEY env var
- * .note = skipped: upstream atom needs plain text fallback fix (see handoff)
+ * .note = skipped: chutes@0.2.1 requires z.string() schema when tools are plugged
+ *         (open-source models support either tool_calls or structured json, not both)
  * .strategy = core behavior tests
  *   - simple prompt
  *   - file tool
