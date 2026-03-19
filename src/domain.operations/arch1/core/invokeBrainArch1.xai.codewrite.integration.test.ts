@@ -20,8 +20,9 @@ import { toolboxFiles } from '@src/domain.operations/arch1/plugins/toolboxes/fil
  *
  * .note = requires XAI_API_KEY env var
  * .note = uses mechanic briefs via `npx rhachet roles boot --role mechanic`
+ * .note = skipped in CI: requires mechanic role linked locally
  */
-describe('invokeBrainArch1.xai.codewrite', () => {
+describe.skip('invokeBrainArch1.xai.codewrite', () => {
   const getContext = () => ({
     creds: {
       anthropic: {
