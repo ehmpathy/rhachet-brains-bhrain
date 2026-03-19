@@ -11,12 +11,10 @@ import { BrainArch1ToolCall } from '@src/domain.objects/BrainArch1/BrainArch1Too
  * .why = enables structured output via rhachet's BrainAtom.ask()
  *
  * .note = plain string schema required because open-source models (deepseek, kimi)
- *         prioritize json_schema over tool calls when both are sent.
- *         the upstream atoms conditionally omit response_format when tools are present,
- *         which means the model returns plain text on final response.
- *         z.string().nullable() works with the plain text fallback in upstream atoms.
+ *         support either tool_calls OR structured json, not both.
+ *         when tools are plugged, atoms like chutes enforce z.string() schema.
  */
-const responseSchema = z.string().nullable();
+const responseSchema = z.string();
 
 /**
  * .what = builds prompt from messages array
