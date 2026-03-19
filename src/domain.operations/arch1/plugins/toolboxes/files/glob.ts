@@ -1,17 +1,12 @@
 import fg from 'fast-glob';
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { z } from 'zod';
-
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
  * .what = zod schema for glob tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaGlobInput = z.object({
+const schemaGlobInput = z.object({
   pattern: z
     .string()
     .describe('The glob pattern to match files (e.g., "**/*.ts")'),
@@ -19,57 +14,42 @@ export const schemaGlobInput = z.object({
     .string()
     .optional()
     .describe(
-      'Optional working directory to search from. Defaults to process.cwd().',
+      'Optional work directory to search from. Defaults to process.cwd().',
     ),
 });
 
 /**
- * .what = tool definition for finding files by glob pattern
- * .why = enables the brain to discover files matching patterns
+ * .what = zod schema for glob tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionGlob = new BrainArch1ToolDefinition({
-  name: 'glob',
-  description:
-    'Finds files matching a glob pattern. Returns matching file paths.',
-  schema: {
-    input: toJsonSchema(schemaGlobInput),
-  },
-  strict: false,
+const schemaGlobOutput = z.object({
+  files: z.string().describe('Matched file paths, one per line'),
 });
 
 /**
- * .what = executes the glob tool
- * .why = performs the actual file pattern matching
+ * .what = glob tool declaration via rhachet's factory
+ * .why = enables the brain to discover files that match patterns
  */
-export const executeToolGlob = async (input: {
-  callId: string;
-  args: { pattern: string; cwd?: string };
-}): Promise<BrainArch1ToolResult> => {
-  try {
-    // find matching files
-    const matches = await fg(input.args.pattern, {
-      cwd: input.args.cwd ?? process.cwd(),
+export const toolGlob = genBrainPlugToolDeclaration({
+  slug: 'glob',
+  name: 'glob',
+  description: 'Find files that match a glob pattern. Returns file paths.',
+  schema: {
+    input: schemaGlobInput,
+    output: schemaGlobOutput,
+  },
+  execute: async ({ invocation }) => {
+    // find matches
+    const matches = await fg(invocation.input.pattern, {
+      cwd: invocation.input.cwd ?? process.cwd(),
       absolute: true,
       onlyFiles: true,
     });
 
     // format output
-    const output =
+    const files =
       matches.length > 0 ? matches.join('\n') : 'no files matched the pattern';
 
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: true,
-      output,
-      error: null,
-    });
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    return new BrainArch1ToolResult({
-      callId: input.callId,
-      success: false,
-      output: '',
-      error: `failed to glob: ${error}`,
-    });
-  }
-};
+    return { files };
+  },
+});

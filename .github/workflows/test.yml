@@ -22,3 +22,6 @@ jobs:
       anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
       openai-api-key: ${{ secrets.OPENAI_API_KEY }}
       tavily-api-key: ${{ secrets.TAVILY_API_KEY }}
+      xai-api-key: ${{ secrets.XAI_API_KEY }}
+      togetherai-api-key: ${{ secrets.TOGETHERAI_API_KEY }}
+      chutes-api-key: ${{ secrets.CHUTES_API_KEY }}

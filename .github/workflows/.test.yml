@@ -22,6 +22,15 @@ on:
       tavily-api-key:
         description: "api key for tavily, used in web search integration tests"
         required: true
+      xai-api-key:
+        description: "api key for xai, used in integration tests"
+        required: false
+      togetherai-api-key:
+        description: "api key for together ai, used in integration tests"
+        required: false
+      chutes-api-key:
+        description: "api key for chutes, used in integration tests"
+        required: false
 
 permissions:
   id-token: write # required for oidc
@@ -183,6 +192,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
           OPENAI_API_KEY: ${{ secrets.openai-api-key }}
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
+          TOGETHERAI_API_KEY: ${{ secrets.togetherai-api-key }}
+          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
 
   test-acceptance-locally:
     runs-on: ubuntu-24.04
@@ -221,3 +233,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
           OPENAI_API_KEY: ${{ secrets.openai-api-key }}
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
+          TOGETHERAI_API_KEY: ${{ secrets.togetherai-api-key }}
+          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}

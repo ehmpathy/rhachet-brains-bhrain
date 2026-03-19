@@ -1,16 +1,11 @@
+import { genBrainPlugToolDeclaration } from 'rhachet/brains';
 import { z } from 'zod';
-
-import {
-  BrainArch1ToolDefinition,
-  toJsonSchema,
-} from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
-import { BrainArch1ToolResult } from '@src/domain.objects/BrainArch1/BrainArch1ToolResult';
 
 /**
  * .what = zod schema for webfetch tool input
- * .why = enables type-safe validation and json schema generation
+ * .why = enables type-safe validation
  */
-export const schemaWebfetchInput = z.object({
+const schemaWebfetchInput = z.object({
   url: z.string().describe('The URL to fetch content from'),
   max_length: z
     .number()
@@ -19,32 +14,30 @@ export const schemaWebfetchInput = z.object({
 });
 
 /**
- * .what = tool definition for fetching web page content
- * .why = enables the brain to read content from URLs for research
+ * .what = zod schema for webfetch tool output
+ * .why = enables type-safe output validation
  */
-export const toolDefinitionFetch = new BrainArch1ToolDefinition({
-  name: 'webfetch',
-  description:
-    'Fetch and read content from a URL. Returns the text content of the page. Use this to read articles, documentation, or other web pages after finding them via websearch.',
-  schema: {
-    input: toJsonSchema(schemaWebfetchInput),
-  },
-  strict: false,
+const schemaWebfetchOutput = z.object({
+  content: z.string().describe('Text content from the URL'),
 });
 
 /**
- * .what = fetches and extracts text content from a URL
- * .why = enables reading web page content for research
+ * .what = webfetch tool declaration via rhachet's factory
+ * .why = enables the brain to read content from URLs for research
  */
-export const executeToolFetch = async (input: {
-  callId: string;
-  args: { url: string; max_length?: number };
-}): Promise<BrainArch1ToolResult> => {
-  const { callId, args } = input;
-  const maxLength = Math.min(args.max_length ?? 10000, 50000);
+export const toolWebFetch = genBrainPlugToolDeclaration({
+  slug: 'webfetch',
+  name: 'webfetch',
+  description:
+    'Fetch and read content from a URL. Returns the text content of the page. Use this to read articles, documentation, or other web pages found via websearch.',
+  schema: {
+    input: schemaWebfetchInput,
+    output: schemaWebfetchOutput,
+  },
+  execute: async ({ invocation }) => {
+    const maxLength = Math.min(invocation.input.max_length ?? 10000, 50000);
 
-  try {
-    const response = await fetch(args.url, {
+    const response = await fetch(invocation.input.url, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (compatible; BrainArch1/1.0; +https://github.com/ehmpathy)',
@@ -54,12 +47,9 @@ export const executeToolFetch = async (input: {
     });
 
     if (!response.ok)
-      return new BrainArch1ToolResult({
-        callId,
-        success: false,
-        output: '',
-        error: `fetch failed: ${response.status} ${response.statusText}`,
-      });
+      throw new Error(
+        `fetch failed: ${response.status} ${response.statusText}`,
+      );
 
     const contentType = response.headers.get('content-type') ?? '';
     const html = await response.text();
@@ -71,21 +61,9 @@ export const executeToolFetch = async (input: {
         ? text.slice(0, maxLength) + '\n\n[truncated]'
         : text;
 
-    return new BrainArch1ToolResult({
-      callId,
-      success: true,
-      output: `Content from ${args.url}:\n\n${truncated}`,
-      error: null,
-    });
-  } catch (error) {
-    return new BrainArch1ToolResult({
-      callId,
-      success: false,
-      output: '',
-      error: `fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
-};
+    return { content: `Content from ${invocation.input.url}:\n\n${truncated}` };
+  },
+});
 
 /**
  * .what = extracts readable text from HTML content

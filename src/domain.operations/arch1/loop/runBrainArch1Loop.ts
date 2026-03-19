@@ -1,12 +1,11 @@
-import type { BrainArch1Atom } from '@src/domain.objects/BrainArch1/BrainArch1Atom';
+import type { BrainAtom, BrainPlugToolDefinition } from 'rhachet/brains';
+
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
 import type { BrainArch1LoopIteration } from '@src/domain.objects/BrainArch1/BrainArch1LoopIteration';
 import { BrainArch1LoopResult } from '@src/domain.objects/BrainArch1/BrainArch1LoopResult';
 import { BrainArch1MemoryTokenUsage } from '@src/domain.objects/BrainArch1/BrainArch1MemoryTokenUsage';
 import type { BrainArch1PermissionGuard } from '@src/domain.objects/BrainArch1/BrainArch1PermissionGuard';
 import type { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
-import type { BrainArch1ToolDefinition } from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
 import { iterateBrainArch1Loop } from '@src/domain.operations/arch1/loop/iterateBrainArch1Loop';
 
 /**
@@ -17,7 +16,7 @@ const DEFAULT_MAX_ITERATIONS = 100;
 
 /**
  * .what = aggregates token usage across multiple iterations
- * .why = enables tracking cumulative cost/usage
+ * .why = enables cumulative cost/usage track
  */
 const aggregateTokenUsage = (
   iterations: BrainArch1LoopIteration[],
@@ -56,10 +55,10 @@ const aggregateTokenUsage = (
  */
 export const runBrainArch1Loop = async (
   input: {
-    atom: BrainArch1Atom;
+    atom: BrainAtom;
     messages: BrainArch1SessionMessage[];
-    definitions: BrainArch1ToolDefinition[];
-    toolboxByToolName: Map<string, BrainArch1Toolbox>;
+    tools: BrainPlugToolDefinition[];
+    toolBySlug: Map<string, BrainPlugToolDefinition>;
     permissionGuard: BrainArch1PermissionGuard;
     maxIterations?: number;
     maxTokens?: number;
@@ -77,8 +76,8 @@ export const runBrainArch1Loop = async (
       {
         atom: input.atom,
         messages,
-        definitions: input.definitions,
-        toolboxByToolName: input.toolboxByToolName,
+        tools: input.tools,
+        toolBySlug: input.toolBySlug,
         permissionGuard: input.permissionGuard,
         iterationNumber: i,
         maxTokens: input.maxTokens,

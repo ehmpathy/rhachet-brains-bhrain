@@ -1,48 +1,43 @@
 import { BadRequestError } from 'helpful-errors';
-
-import type { BrainArch1Toolbox } from '@src/domain.objects/BrainArch1/BrainArch1Toolbox';
-import type { BrainArch1ToolDefinition } from '@src/domain.objects/BrainArch1/BrainArch1ToolDefinition';
+import type { BrainPlugToolDefinition } from 'rhachet/brains';
 
 /**
- * .what = result of merging multiple tool boxes
- * .why = provides both definitions for llm and lookup for execution
+ * .what = result of merged tool arrays
+ * .why = provides tools array for llm and lookup map for execution
  */
-export interface MergedBrainArch1Toolboxes {
-  definitions: BrainArch1ToolDefinition[];
-  toolboxByToolName: Map<string, BrainArch1Toolbox>;
+export interface MergedBrainArch1Tools {
+  tools: BrainPlugToolDefinition[];
+  toolBySlug: Map<string, BrainPlugToolDefinition>;
 }
 
 /**
- * .what = merges multiple tool boxes into a unified collection
+ * .what = merges multiple tool arrays into a unified collection
  * .why = enables brain to use tools from multiple sources with single interface
  *
- * .note = throws if duplicate tool names detected
+ * .note = throws if duplicate tool slugs detected
  */
 export const mergeBrainArch1Toolboxes = (input: {
-  toolboxes: BrainArch1Toolbox[];
-}): MergedBrainArch1Toolboxes => {
-  const definitions: BrainArch1ToolDefinition[] = [];
-  const toolboxByToolName = new Map<string, BrainArch1Toolbox>();
-  const seenToolNames = new Set<string>();
+  toolboxes: BrainPlugToolDefinition[][];
+}): MergedBrainArch1Tools => {
+  const tools: BrainPlugToolDefinition[] = [];
+  const toolBySlug = new Map<string, BrainPlugToolDefinition>();
 
-  // iterate through each toolbox
+  // iterate through each toolbox array
   for (const toolbox of input.toolboxes) {
-    // iterate through each tool definition in the box
-    for (const definition of toolbox.definitions) {
-      // check for duplicate tool names
-      if (seenToolNames.has(definition.name)) {
-        throw new BadRequestError('duplicate tool name across toolboxes', {
-          toolName: definition.name,
-          toolboxName: toolbox.name,
+    // iterate through each tool in the array
+    for (const tool of toolbox) {
+      // check for duplicate tool slugs
+      if (toolBySlug.has(tool.slug)) {
+        throw new BadRequestError('duplicate tool slug across toolboxes', {
+          toolSlug: tool.slug,
         });
       }
 
       // register the tool
-      seenToolNames.add(definition.name);
-      definitions.push(definition);
-      toolboxByToolName.set(definition.name, toolbox);
+      tools.push(tool);
+      toolBySlug.set(tool.slug, tool);
     }
   }
 
-  return { definitions, toolboxByToolName };
+  return { tools, toolBySlug };
 };

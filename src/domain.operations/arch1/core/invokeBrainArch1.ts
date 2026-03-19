@@ -1,14 +1,27 @@
 import { BadRequestError } from 'helpful-errors';
+import type { BrainAtom, BrainPlugToolDefinition } from 'rhachet/brains';
 
 import type { BrainArch1Context } from '@src/domain.objects/BrainArch1/BrainArch1Context';
 import { BrainArch1LoopResult } from '@src/domain.objects/BrainArch1/BrainArch1LoopResult';
 import { BrainArch1MemoryTokenUsage } from '@src/domain.objects/BrainArch1/BrainArch1MemoryTokenUsage';
 import { BrainArch1PermissionDecision } from '@src/domain.objects/BrainArch1/BrainArch1PermissionDecision';
 import type { BrainArch1PermissionGuard } from '@src/domain.objects/BrainArch1/BrainArch1PermissionGuard';
-import type { BrainArch1Repl } from '@src/domain.objects/BrainArch1/BrainArch1Repl';
 import { BrainArch1SessionMessage } from '@src/domain.objects/BrainArch1/BrainArch1SessionMessage';
 import { runBrainArch1Loop } from '@src/domain.operations/arch1/loop/runBrainArch1Loop';
 import { mergeBrainArch1Toolboxes } from '@src/domain.operations/arch1/tool/mergeBrainArch1Toolboxes';
+
+/**
+ * .what = inline config for the agentic loop (replaces BrainArch1Repl)
+ * .why = no intermediate domain object; config passed directly
+ */
+export interface BrainArch1Config {
+  atom: BrainAtom;
+  toolboxes: BrainPlugToolDefinition[][];
+  systemPrompt: string | null;
+  maxIterations: number;
+  maxTokens: number;
+  permissionGuard: BrainArch1PermissionGuard | null;
+}
 
 /**
  * .what = default system prompt when none provided
@@ -35,7 +48,7 @@ const createDefaultPermissionGuard = (): BrainArch1PermissionGuard => ({
  */
 export const invokeBrainArch1 = async (
   input: {
-    repl: BrainArch1Repl;
+    config: BrainArch1Config;
     userInput: string;
     conversationHistory?: BrainArch1SessionMessage[];
   },
@@ -69,12 +82,12 @@ export const invokeBrainArch1 = async (
   }
 
   // merge toolboxes
-  const { definitions, toolboxByToolName } = mergeBrainArch1Toolboxes({
-    toolboxes: input.repl.toolboxes,
+  const { tools, toolBySlug } = mergeBrainArch1Toolboxes({
+    toolboxes: input.config.toolboxes,
   });
 
   // build initial messages
-  const systemPrompt = input.repl.role.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = input.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
   const systemMessage = new BrainArch1SessionMessage({
     role: 'system',
     content: systemPrompt,
@@ -102,27 +115,27 @@ export const invokeBrainArch1 = async (
   }, 0);
 
   // check if input exceeds max tokens
-  if (estimatedInputTokens > input.repl.constraints.maxTokens) {
+  if (estimatedInputTokens > input.config.maxTokens) {
     throw new BadRequestError('input exceeds context window limit', {
       estimatedInputTokens,
-      maxTokens: input.repl.constraints.maxTokens,
+      maxTokens: input.config.maxTokens,
     });
   }
 
   // get permission guard
   const permissionGuard =
-    input.repl.permission ?? createDefaultPermissionGuard();
+    input.config.permissionGuard ?? createDefaultPermissionGuard();
 
   // run the agentic loop
   const result = await runBrainArch1Loop(
     {
-      atom: input.repl.atom,
+      atom: input.config.atom,
       messages,
-      definitions,
-      toolboxByToolName,
+      tools,
+      toolBySlug,
       permissionGuard,
-      maxIterations: input.repl.constraints.maxIterations,
-      maxTokens: input.repl.constraints.maxTokens,
+      maxIterations: input.config.maxIterations,
+      maxTokens: input.config.maxTokens,
     },
     context,
   );

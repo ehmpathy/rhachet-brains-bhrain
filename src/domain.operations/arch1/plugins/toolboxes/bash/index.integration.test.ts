@@ -1,120 +1,130 @@
 import { given, then, when } from 'test-fns';
 
 import { genMockBrainArch1Context } from '@src/.test/genMockBrainArch1Context';
-import { BrainArch1ToolCall } from '@src/domain.objects/BrainArch1/BrainArch1ToolCall';
 
-import { toolboxBash } from './index';
+import { toolBashExec } from './exec';
 
 const mockContext = genMockBrainArch1Context();
 
+/**
+ * .what = integration tests for bash toolbox
+ * .why = verify bash exec tool works via BrainPlugToolExecution contract
+ */
 describe('toolboxBash', () => {
   given('[case1] exec tool', () => {
-    when('[t0] executing a simple command', () => {
-      then('returns stdout', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-1',
-          name: 'bash_exec',
-          input: { command: 'echo "hello world"' },
-        });
+    when('[t0] a simple command is invoked', () => {
+      then('returns stdout on success', async () => {
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-1',
+              slug: 'bash_exec',
+              input: { command: 'echo "hello world"' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(true);
-        expect(result.output).toContain('hello world');
+        expect(result.signal).toBe('success');
+        if (result.signal === 'success') {
+          expect(result.output.stdout).toContain('hello world');
+        }
       });
     });
 
-    when('[t1] executing a command that writes to stderr', () => {
-      then('returns stderr', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-2',
-          name: 'bash_exec',
-          input: { command: 'echo "warning" >&2' },
-        });
+    when('[t1] command writes to stderr', () => {
+      then('returns stderr on success', async () => {
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-2',
+              slug: 'bash_exec',
+              input: { command: 'echo "warning" >&2' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(true);
-        expect(result.output).toContain('stderr');
-        expect(result.output).toContain('warning');
+        expect(result.signal).toBe('success');
+        if (result.signal === 'success') {
+          expect(result.output.stderr).toContain('warning');
+        }
       });
     });
 
-    when('[t2] executing a command that fails', () => {
-      then('returns error', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-3',
-          name: 'bash_exec',
-          input: { command: 'exit 1' },
-        });
+    when('[t2] command fails with non-zero exit', () => {
+      then('returns error:constraint', async () => {
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-3',
+              slug: 'bash_exec',
+              input: { command: 'exit 1' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(false);
-        expect(result.error).toBeTruthy();
-        expect(result.error).toContain('Command failed');
+        expect(result.signal).toBe('error:constraint');
       });
     });
 
-    when('[t3] executing with custom cwd', () => {
+    when('[t3] custom cwd is provided', () => {
       then('runs in specified directory', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-4',
-          name: 'bash_exec',
-          input: { command: 'pwd', cwd: '/tmp' },
-        });
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-4',
+              slug: 'bash_exec',
+              input: { command: 'pwd', cwd: '/tmp' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(true);
-        expect(result.output).toContain('/tmp');
+        expect(result.signal).toBe('success');
+        if (result.signal === 'success') {
+          expect(result.output.stdout).toContain('/tmp');
+        }
       });
     });
 
     when('[t4] command is missing', () => {
-      then('returns error', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-5',
-          name: 'bash_exec',
-          input: {},
-        });
+      then('returns error:constraint', async () => {
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-5',
+              slug: 'bash_exec',
+              // intentionally missing command to test error handling
+              input: { command: '' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('command is required');
+        expect(result.signal).toBe('error:constraint');
       });
     });
 
-    when('[t5] executing a command that produces no output', () => {
-      then('returns no output message', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-6',
-          name: 'bash_exec',
-          input: { command: 'true' },
-        });
+    when('[t5] command produces no output', () => {
+      then('returns empty stdout/stderr', async () => {
+        const result = await toolBashExec.execute(
+          {
+            invocation: {
+              exid: 'test-6',
+              slug: 'bash_exec',
+              input: { command: 'true' },
+            },
+          },
+          mockContext,
+        );
 
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(true);
-        expect(result.output).toBe('(no output)');
-      });
-    });
-  });
-
-  given('[case2] unknown tool', () => {
-    when('[t0] calling undefined tool', () => {
-      then('returns error', async () => {
-        const call = new BrainArch1ToolCall({
-          id: 'test-7',
-          name: 'bash_unknown',
-          input: {},
-        });
-
-        const result = await toolboxBash.execute({ call }, mockContext);
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain("unknown bash tool 'bash_unknown'");
+        expect(result.signal).toBe('success');
+        if (result.signal === 'success') {
+          expect(result.output.stdout).toBe('');
+          expect(result.output.stderr).toBe('');
+        }
       });
     });
   });
