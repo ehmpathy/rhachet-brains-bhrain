@@ -12,13 +12,15 @@ process.env.FORCE_COLOR = 'true';
 // https://jestjs.io/docs/configuration
 const config: Config = {
   verbose: true,
-  reporters: [['default', { summaryThreshold: 0 }]], // ensure we always get a failure summary at the bottom, to avoid the hunt
+  reporters: [
+    ['default', { summaryThreshold: 0 }], // ensure we always get a failure summary at the bottom, to avoid the hunt
+    ['test-fns/slowtest.reporter.jest', { slow: '10s', output: '.log/slowtest/integration.report.json' }],
+  ],
   testEnvironment: 'node',
   moduleFileExtensions: ['js', 'ts', 'mjs'],
   moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
     '^@src/(.*)$': '<rootDir>/src/$1',
-    // codex-sdk is ESM-only with type: module, needs explicit resolution
-    '^@openai/codex-sdk$': '<rootDir>/node_modules/@openai/codex-sdk/dist/index.js',
   },
   transform: {
     '^.+\\.(t|j)sx?$': '@swc/jest',
@@ -27,9 +29,9 @@ const config: Config = {
   transformIgnorePatterns: [
     // transform ESM packages that jest needs to handle
     // pattern handles both direct node_modules and pnpm's .pnpm structure
-    '/node_modules/(?!(\\.pnpm/(@anthropic-ai|@openai))|(@anthropic-ai|@openai)/)',
+    '/node_modules/(?!(\\.pnpm/(@anthropic-ai|@openai))|(@anthropic-ai|@openai)/)/',
   ],
-  // resolve ESM modules from node_modules
+  // enable ESM modules from node_modules
   extensionsToTreatAsEsm: ['.ts'],
   testMatch: ['**/*.integration.test.ts', '!**/.yalc/**'],
   setupFilesAfterEnv: ['./jest.integration.env.ts'],

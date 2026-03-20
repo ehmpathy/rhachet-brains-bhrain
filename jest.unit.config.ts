@@ -12,7 +12,10 @@ process.env.FORCE_COLOR = 'true';
 // https://jestjs.io/docs/configuration
 const config: Config = {
   verbose: true,
-  reporters: [['default', { summaryThreshold: 0 }]], // ensure we always get a failure summary at the bottom, to avoid the hunt
+  reporters: [
+    ['default', { summaryThreshold: 0 }], // ensure we always get a failure summary at the bottom, to avoid the hunt
+    ['test-fns/slowtest.reporter.jest', { slow: '10s', output: '.log/slowtest/unit.report.json' }],
+  ],
   testEnvironment: 'node',
   moduleFileExtensions: ['js', 'ts', 'mjs'],
   moduleNameMapper: {
@@ -23,10 +26,12 @@ const config: Config = {
     '^.+\\.mjs$': '@swc/jest',
   },
   transformIgnorePatterns: [
-    // transform esm modules that jest would otherwise choke on
+    // transform ESM packages that jest needs to handle
     // pattern handles both direct node_modules and pnpm's .pnpm structure
-    '/node_modules/(?!(\\.pnpm/(@anthropic-ai))|(@anthropic-ai)/)',
+    '/node_modules/(?!(\\.pnpm/(@anthropic-ai|@openai))|(@anthropic-ai|@openai)/)/',
   ],
+  // enable ESM modules from node_modules
+  extensionsToTreatAsEsm: ['.ts'],
   testMatch: [
     // note: order matters
     '**/*.test.ts',

@@ -26,6 +26,9 @@ import { toolboxFiles } from '@src/domain.operations/arch1/plugins/toolboxes/fil
  * .see = invokeBrainArch1.xai.codewrite.integration.test.ts for code generation
  */
 describe('invokeBrainArch1.xai', () => {
+  // xai api is slower than anthropic/openai — allow extra time for all tests
+  jest.setTimeout(180_000);
+
   const getContext = () => ({
     creds: {
       anthropic: {

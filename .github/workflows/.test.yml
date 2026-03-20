@@ -17,20 +17,17 @@ on:
         description: "api key for anthropic, used in integration tests"
         required: true
       openai-api-key:
-        description: "api key for openai, used in integration tests"
+        description: "api key for openai/xai, used in integration tests"
         required: true
       tavily-api-key:
-        description: "api key for tavily, used in web search integration tests"
+        description: "api key for tavily web search, used in integration tests"
         required: true
-      xai-api-key:
-        description: "api key for xai, used in integration tests"
-        required: false
-      togetherai-api-key:
-        description: "api key for together ai, used in integration tests"
-        required: false
       chutes-api-key:
         description: "api key for chutes, used in integration tests"
-        required: false
+        required: true
+      xai-api-key:
+        description: "api key for xai (grok), used in integration tests"
+        required: true
 
 permissions:
   id-token: write # required for oidc
@@ -44,7 +41,7 @@ jobs:
   # run tests in parallel
   test-commits:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, test-shards-omit]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -67,7 +64,7 @@ jobs:
 
   test-types:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, test-shards-omit]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -84,14 +81,14 @@ jobs:
           key: ${{ needs.install.outputs.node-modules-cache-key }}
 
       - name: build
-        run: npm run build
+        run: npm run build # build before test:types, to ensure .dist/ artifacts are importable for blackbox tests
 
       - name: test:types
         run: npm run test:types
 
   test-format:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, test-shards-omit]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -115,7 +112,7 @@ jobs:
 
   test-lint:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, test-shards-omit]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -136,7 +133,7 @@ jobs:
 
   test-unit:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, test-shards-omit]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -155,84 +152,229 @@ jobs:
       - name: test:unit
         run: THOROUGH=true npm run test:unit
 
+  # shard setup job
+  enshard:
+    name: enshard
+    runs-on: ubuntu-24.04
+    outputs:
+      integration-matrix: ${{ steps.integration.outputs.matrix }}
+      integration-patterns: ${{ steps.integration.outputs.patterns }}
+      acceptance-matrix: ${{ steps.acceptance.outputs.matrix }}
+      acceptance-patterns: ${{ steps.acceptance.outputs.patterns }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            jest.integration.shards.jsonc
+            jest.acceptance.shards.jsonc
+            .github/actions/test-shards-setup
+          sparse-checkout-cone-mode: false
+
+      - name: setup integration shards
+        id: integration
+        uses: ./.github/actions/test-shards-setup
+        with:
+          config-file: jest.integration.shards.jsonc
+          test-type: integration
+
+      - name: setup acceptance shards
+        id: acceptance
+        uses: ./.github/actions/test-shards-setup
+        with:
+          config-file: jest.acceptance.shards.jsonc
+          test-type: acceptance
+
+  # placeholder job for github actions visualization alignment
+  # note: github actions has no column position controls;
+  #       this job pushes test-* jobs one column right to align with test-shards-* column
+  test-shards-omit:
+    runs-on: ubuntu-24.04
+    needs: [install]
+    steps:
+      - run: echo "👌 placeholder for column alignment"
+
+  # shard runner jobs
+  test-shards-integration:
+    runs-on: ubuntu-24.04
+    needs: [install, enshard]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.enshard.outputs.integration-matrix) }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: set node-version
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: get node-modules from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ./node_modules
+          key: ${{ needs.install.outputs.node-modules-cache-key }}
+
+      - name: get aws auth, if creds supplied
+        if: ${{ inputs.creds-aws-role-arn }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.creds-aws-role-arn }}
+          aws-region: ${{ inputs.creds-aws-region }}
+
+      - name: start:testdb
+        run: npm run start:testdb --if-present
+
+      - name: start:livedb:dev
+        run: npm run start:livedb:dev --if-present
+
+      - name: build
+        run: npm run build
+
+      - name: test:integration (explicit ${{ matrix.shard.index }})
+        if: matrix.shard.type == 'explicit'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
+          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
+          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
+          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
+        run: |
+          set -eu
+          patterns='${{ join(matrix.shard.patterns, '|') }}'
+          THOROUGH=true npm run test:integration -- --testPathPatterns="$patterns" --json --outputFile=jest-results.json
+
+      - name: test:integration (dynamic ${{ matrix.shard.shard }}/${{ matrix.shard.total }})
+        if: matrix.shard.type == 'dynamic'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
+          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
+          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
+          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
+        run: |
+          set -eu
+          exclude='${{ needs.enshard.outputs.integration-patterns }}'
+          if [[ -n "$exclude" ]]; then
+            THOROUGH=true npm run test:integration -- --testPathIgnorePatterns="$exclude" --shard=${{ matrix.shard.shard }}/${{ matrix.shard.total }} --json --outputFile=jest-results.json
+          else
+            THOROUGH=true npm run test:integration -- --shard=${{ matrix.shard.shard }}/${{ matrix.shard.total }} --json --outputFile=jest-results.json
+          fi
+
+      - name: report slow tests
+        if: always() && hashFiles('jest-results.json') != ''
+        run: |
+          set -eu
+          jq -r '.testResults[] | "\(.name):\(.perfStats.runtime // 0)"' jest-results.json | while IFS=: read -r name runtime; do
+            [[ -z "$runtime" || "$runtime" == "null" ]] && continue
+            seconds=$((runtime / 1000))
+            if [[ $seconds -ge 30 ]]; then
+              echo "::warning file=${name}::slow test: ${seconds}s"
+            elif [[ $seconds -ge 10 ]]; then
+              echo "::notice file=${name}::test duration: ${seconds}s"
+            fi
+          done
+
+  test-shards-acceptance:
+    runs-on: ubuntu-24.04
+    needs: [install, enshard]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.enshard.outputs.acceptance-matrix) }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: set node-version
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: get node-modules from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ./node_modules
+          key: ${{ needs.install.outputs.node-modules-cache-key }}
+
+      - name: get aws auth, if creds supplied
+        if: ${{ inputs.creds-aws-role-arn }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.creds-aws-role-arn }}
+          aws-region: ${{ inputs.creds-aws-region }}
+
+      - name: start:testdb
+        run: npm run start:testdb --if-present
+
+      - name: start:livedb:dev
+        run: npm run start:livedb:dev --if-present
+
+      - name: build
+        run: npm run build
+
+      - name: test:acceptance (explicit ${{ matrix.shard.index }})
+        if: matrix.shard.type == 'explicit'
+        run: |
+          set -eu
+          patterns='${{ join(matrix.shard.patterns, '|') }}'
+          THOROUGH=true npm run test:acceptance -- --testPathPatterns="$patterns" --json --outputFile=jest-results.json
+
+      - name: test:acceptance (dynamic ${{ matrix.shard.shard }}/${{ matrix.shard.total }})
+        if: matrix.shard.type == 'dynamic'
+        run: |
+          set -eu
+          exclude='${{ needs.enshard.outputs.acceptance-patterns }}'
+          if [[ -n "$exclude" ]]; then
+            THOROUGH=true npm run test:acceptance -- --testPathIgnorePatterns="$exclude" --shard=${{ matrix.shard.shard }}/${{ matrix.shard.total }} --json --outputFile=jest-results.json
+          else
+            THOROUGH=true npm run test:acceptance -- --shard=${{ matrix.shard.shard }}/${{ matrix.shard.total }} --json --outputFile=jest-results.json
+          fi
+
+      - name: report slow tests
+        if: always() && hashFiles('jest-results.json') != ''
+        run: |
+          set -eu
+          jq -r '.testResults[] | "\(.name):\(.perfStats.runtime // 0)"' jest-results.json | while IFS=: read -r name runtime; do
+            [[ -z "$runtime" || "$runtime" == "null" ]] && continue
+            seconds=$((runtime / 1000))
+            if [[ $seconds -ge 30 ]]; then
+              echo "::warning file=${name}::slow test: ${seconds}s"
+            elif [[ $seconds -ge 10 ]]; then
+              echo "::notice file=${name}::test duration: ${seconds}s"
+            fi
+          done
+
+  # union job: aggregates shard results into single status for pr merge constraints
   test-integration:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, enshard, test-shards-integration]
+    if: always() && needs.install.result == 'success' && needs.enshard.result == 'success'
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - name: report shard results
+        run: |
+          set -eu
+          if [[ "${{ needs.test-shards-integration.result }}" == "success" ]]; then
+            echo "👌 all integration test shards passed"
+          else
+            echo "::error::some integration test shards failed"
+            exit 1
+          fi
 
-      - name: set node-version
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: ".nvmrc"
-
-      - name: get node-modules from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ./node_modules
-          key: ${{ needs.install.outputs.node-modules-cache-key }}
-
-      - name: get aws auth, if creds supplied
-        if: ${{ inputs.creds-aws-role-arn }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ inputs.creds-aws-role-arn }}
-          aws-region: ${{ inputs.creds-aws-region }}
-
-      - name: start:testdb
-        run: npm run start:testdb --if-present
-
-      - name: start:livedb:dev
-        run: npm run start:livedb:dev --if-present
-
-      - name: test:integration
-        run: THOROUGH=true npm run test:integration
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
-          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
-          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
-          XAI_API_KEY: ${{ secrets.xai-api-key }}
-          TOGETHERAI_API_KEY: ${{ secrets.togetherai-api-key }}
-          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
-
+  # union job: aggregates shard results into single status for pr merge constraints
   test-acceptance-locally:
     runs-on: ubuntu-24.04
-    needs: [install]
+    needs: [install, enshard, test-shards-acceptance]
+    if: always() && needs.install.result == 'success' && needs.enshard.result == 'success'
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
-
-      - name: set node-version
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: ".nvmrc"
-
-      - name: get node-modules from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ./node_modules
-          key: ${{ needs.install.outputs.node-modules-cache-key }}
-
-      - name: get aws auth, if creds supplied
-        if: ${{ inputs.creds-aws-role-arn }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ inputs.creds-aws-role-arn }}
-          aws-region: ${{ inputs.creds-aws-region }}
-
-      - name: start:testdb
-        run: npm run start:testdb --if-present
-
-      - name: start:livedb:dev
-        run: npm run start:livedb:dev --if-present
-
-      - name: test:acceptance:locally
-        run: THOROUGH=true npm run test:acceptance:locally --if-present
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
-          OPENAI_API_KEY: ${{ secrets.openai-api-key }}
-          TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
-          XAI_API_KEY: ${{ secrets.xai-api-key }}
-          TOGETHERAI_API_KEY: ${{ secrets.togetherai-api-key }}
-          CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
+      - name: report shard results
+        run: |
+          set -eu
+          if [[ "${{ needs.test-shards-acceptance.result }}" == "success" ]]; then
+            echo "👌 all acceptance test shards passed"
+          else
+            echo "::error::some acceptance test shards failed"
+            exit 1
+          fi
