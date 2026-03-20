@@ -213,7 +213,7 @@ describe('toolboxFiles', () => {
     });
 
     when('[t2] old_string not unique and replace_all is false', () => {
-      then('returns error:constraint', async () => {
+      then('returns error:malfunction', async () => {
         const testFile = path.join(testDir, 'edit-dupe-test.txt');
         await fs.writeFile(testFile, 'foo foo foo');
 
@@ -228,7 +228,7 @@ describe('toolboxFiles', () => {
           getMockContext(),
         );
 
-        expect(result.signal).toBe('error:constraint');
+        expect(result.signal).toBe('error:malfunction');
       });
     });
   });

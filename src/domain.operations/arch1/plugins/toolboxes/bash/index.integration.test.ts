@@ -53,7 +53,7 @@ describe('toolboxBash', () => {
     });
 
     when('[t2] command fails with non-zero exit', () => {
-      then('returns error:constraint', async () => {
+      then('returns error:malfunction', async () => {
         const result = await toolBashExec.execute(
           {
             invocation: {
@@ -65,7 +65,7 @@ describe('toolboxBash', () => {
           mockContext,
         );
 
-        expect(result.signal).toBe('error:constraint');
+        expect(result.signal).toBe('error:malfunction');
       });
     });
 
@@ -89,8 +89,8 @@ describe('toolboxBash', () => {
       });
     });
 
-    when('[t4] command is missing', () => {
-      then('returns error:constraint', async () => {
+    when('[t4] command is absent', () => {
+      then('returns error:malfunction', async () => {
         const result = await toolBashExec.execute(
           {
             invocation: {
@@ -103,7 +103,7 @@ describe('toolboxBash', () => {
           mockContext,
         );
 
-        expect(result.signal).toBe('error:constraint');
+        expect(result.signal).toBe('error:malfunction');
       });
     });
 

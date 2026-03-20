@@ -12,4 +12,4 @@
 export type { BrainEpisode, BrainOutput, BrainRepl } from 'rhachet';
 
 // BrainRepl factory (the public interface)
-export { genBrainRepl } from '../../domain.operations/brain.repl/genBrainRepl';
+export { genBrainRepl } from '@src/domain.operations/brain.repl/genBrainRepl';
