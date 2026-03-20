@@ -25,6 +25,9 @@ on:
       chutes-api-key:
         description: "api key for chutes, used in integration tests"
         required: true
+      xai-api-key:
+        description: "api key for xai (grok), used in integration tests"
+        required: true
 
 permissions:
   id-token: write # required for oidc
@@ -237,6 +240,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.openai-api-key }}
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
           CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
         run: |
           set -eu
           patterns='${{ join(matrix.shard.patterns, '|') }}'
@@ -249,6 +253,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.openai-api-key }}
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
           CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
+          XAI_API_KEY: ${{ secrets.xai-api-key }}
         run: |
           set -eu
           exclude='${{ needs.enshard.outputs.integration-patterns }}'
