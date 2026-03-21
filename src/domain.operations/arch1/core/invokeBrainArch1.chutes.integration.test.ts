@@ -5,6 +5,7 @@ import { genBrainAtom as genAtomChutes } from 'rhachet-brains-chutes';
 import { given, then, when } from 'test-fns';
 
 import { REPEATABLY_CONFIG } from '@src/.test/infra/repeatably';
+import { withTimeout } from '@src/.test/infra/withTimeout';
 import { logOutputHead } from '@src/.test/logOutputHead';
 import {
   type BrainArch1Config,
@@ -135,7 +136,7 @@ describe('invokeBrainArch1.chutes', () => {
     when('[t0] writes and then reads file', () => {
       then.repeatably(REPEATABLY_CONFIG)(
         'handles multi-step workflow',
-        async () => {
+        withTimeout(150_000, async () => {
           const context = getContext();
 
           const testFile = path.join(testDir, 'test-write-read-chutes.txt');
@@ -169,7 +170,7 @@ describe('invokeBrainArch1.chutes', () => {
 
           const content = await fs.readFile(testFile, 'utf-8');
           expect(content).toContain('Integration test successful');
-        },
+        }),
       );
     });
   });
