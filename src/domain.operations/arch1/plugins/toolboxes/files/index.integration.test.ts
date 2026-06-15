@@ -228,7 +228,7 @@ describe('toolboxFiles', () => {
           getMockContext(),
         );
 
-        expect(result.signal).toBe('error:malfunction');
+        expect(result.signal).toBe('error:constraint');
       });
     });
   });

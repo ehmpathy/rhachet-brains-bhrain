@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { genBrainPlugToolDeclaration } from 'rhachet/brains';
-import { genBrainAtom as genAtomXai } from 'rhachet-brains-xai';
+import { genBrainAtom as genAtomFireworks } from 'rhachet-brains-fireworksai';
 import { given, then, when } from 'test-fns';
 import { z } from 'zod';
 
@@ -15,14 +15,14 @@ import {
 import { toolboxFiles } from '@src/domain.operations/arch1/plugins/toolboxes/files';
 
 /**
- * .what = xai code generation integration tests for invokeBrainArch1
+ * .what = fireworksai m2.7 code generation integration tests for invokeBrainArch1
  * .why = verify brain can write code that follows conventions from briefs
  *
- * .note = requires XAI_API_KEY env var
+ * .note = requires FIREWORKS_API_KEY env var (via keyrack)
  * .note = uses mechanic briefs via `npx rhachet roles boot --role mechanic`
  * .note = skipped in CI: requires mechanic role linked locally
  */
-describe.skip('invokeBrainArch1.xai.codewrite', () => {
+describe.skip('invokeBrainArch1.fireworksai.codewrite.m27', () => {
   const getContext = () => ({
     creds: {
       anthropic: {
@@ -40,7 +40,7 @@ describe.skip('invokeBrainArch1.xai.codewrite', () => {
     log: console,
   });
 
-  given('[case1] xai with code generation from briefs', () => {
+  given('[case1] fireworksai m2.7 with code generation from briefs', () => {
     // extend timeout for code generation (3 minutes)
     jest.setTimeout(180000);
 
@@ -180,7 +180,7 @@ ${realCurlPath} "$@"
           });
 
           const config: BrainArch1Config = {
-            atom: genAtomXai({ slug: 'xai/grok/code-fast-1' }),
+            atom: genAtomFireworks({ slug: 'fireworks/minimax/2.7' }),
             toolboxes: [toolboxFiles, [toolChmod, toolTest]],
             systemPrompt: `You are a senior software engineer. Follow the conventions in these briefs:
 
@@ -222,7 +222,7 @@ After you write it, use the test tool to verify it works with Austin, TX coordin
           );
 
           logOutputHead({
-            label: 'brainArch1.xai.codegen',
+            label: 'brainArch1.fireworksai.m27.codegen',
             output: result.finalResponse ?? '',
           });
 

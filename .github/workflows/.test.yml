@@ -28,6 +28,9 @@ on:
       xai-api-key:
         description: "api key for xai (grok), used in integration tests"
         required: true
+      fireworks-api-key:
+        description: "api key for fireworks.ai, used in integration tests"
+        required: true
 
 permissions:
   id-token: write # required for oidc
@@ -241,6 +244,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
           CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
           XAI_API_KEY: ${{ secrets.xai-api-key }}
+          FIREWORKS_API_KEY: ${{ secrets.fireworks-api-key }}
         run: |
           set -eu
           patterns='${{ join(matrix.shard.patterns, '|') }}'
@@ -254,6 +258,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.tavily-api-key }}
           CHUTES_API_KEY: ${{ secrets.chutes-api-key }}
           XAI_API_KEY: ${{ secrets.xai-api-key }}
+          FIREWORKS_API_KEY: ${{ secrets.fireworks-api-key }}
         run: |
           set -eu
           exclude='${{ needs.enshard.outputs.integration-patterns }}'

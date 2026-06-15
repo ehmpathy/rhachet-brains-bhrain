@@ -189,3 +189,18 @@ see `.agent/repo=.this/role=any/briefs/` for detailed documentation:
 - [rhachet documentation](https://github.com/ehmpathy/rhachet)
 - [rhachet-brains-anthropic](https://github.com/ehmpathy/rhachet-brains-anthropic) — anthropic atom supplier
 - [rhachet-brains-openai](https://github.com/ehmpathy/rhachet-brains-openai) — openai atom supplier
+
+---
+
+## appendix: brain choice for codewrite
+
+evaluated brain atoms for BrainArch1 codewrite task (shell script generation with tool use). tested 10 attempts per model on 2026-06-09.
+
+### benchmark
+
+| model | passed | rate | avg time | notes |
+|-------|--------|------|----------|-------|
+| **fireworks/deepseek/v4-flash** | 10/10 | **100%** | ~77s | recommended |
+| fireworks/minimax/2.7 | 7/10 | 70% | ~31s | fast when works, 30% timeout |
+| fireworks/minimax/2.5 | 4/10 | 40% | ~22s | 1 JSON err, 5 timeout |
+| xai/grok (baseline) | 2/10 | 20% | ~57s | deprecated |

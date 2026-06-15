@@ -61,7 +61,7 @@ describe.skip('invokeBrainArch1.togetherai', () => {
           const context = getContext();
 
           const config: BrainArch1Config = {
-            atom: genAtomTogetherai({ slug: 'together/deepseek/v3.1' }),
+            atom: genAtomTogetherai({ slug: 'together/deepseek/v4-pro' }),
             toolboxes: [],
             systemPrompt: 'You are a helpful assistant. Respond concisely.',
             maxIterations: 100,
@@ -101,7 +101,7 @@ describe.skip('invokeBrainArch1.togetherai', () => {
           await fs.writeFile(testFilePath, 'Hello from togetherai test file!');
 
           const config: BrainArch1Config = {
-            atom: genAtomTogetherai({ slug: 'together/deepseek/v3.1' }),
+            atom: genAtomTogetherai({ slug: 'together/deepseek/v4-pro' }),
             toolboxes: [toolboxFiles],
             systemPrompt:
               'You are a helpful assistant with file system access. Use tools when needed.',
@@ -142,7 +142,7 @@ describe.skip('invokeBrainArch1.togetherai', () => {
           const testFile = path.join(testDir, 'test-write-read-togetherai.txt');
 
           const config: BrainArch1Config = {
-            atom: genAtomTogetherai({ slug: 'together/deepseek/v3.1' }),
+            atom: genAtomTogetherai({ slug: 'together/deepseek/v4-pro' }),
             toolboxes: [toolboxFiles],
             systemPrompt:
               'You are a helpful assistant. Use tools when needed. Be concise.',
